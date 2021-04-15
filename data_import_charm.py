@@ -25,6 +25,7 @@ Tunnel = None
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = False  # TODO fix
 Import_study1 = True
+# TODO: make global username variable
 
 
 class ImportTools:
@@ -74,7 +75,8 @@ class ImportTools:
                 # retrieve & print your results
                 temp = cursor.fetchall()
                 for row in temp:
-                    print(temp)
+                    print(row)
+                connection.commit()
                 cursor.close()
             connection.close()
 
@@ -289,18 +291,18 @@ class ImportStudy(ImportTools):
             # TODO: does this need to be here because other wise times out?
             # Connect with database and execute insert statment:
             if In_jyptr:
-                # connect to bioed via an ssh tunnel
-                # do NOT include your password, use getpass
-                Tunnel = sshtunnel.SSHTunnelForwarder(
-                    ('bioed.bu.edu', 22),
-                    ssh_username='anau',
-                    ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
-                    remote_bind_address=('localhost', 4253))
+                #TODO remove # connect to bioed via an ssh tunnel
+                #TODO remove # do NOT include your password, use getpass
+                #TODO remove Tunnel = sshtunnel.SSHTunnelForwarder(
+                #TODO remove     ('bioed.bu.edu', 22),
+                #TODO remove     ssh_username='anau',
+                #TODO remove     ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
+                #TODO remove     remote_bind_address=('localhost', 4253))
                 # the password requested here is your kerberos password that you use to access bioed
                 # "activate" the ssh tunnel
-                Tunnel.start()
+                #TODO REMOVE  Tunnel.start()
                 self.execute_query(self.insert_statement)
-                Tunnel.stop()
+                #TODO REMOVE  Tunnel.stop()
         # TODO: modify to raise error?
         pass
 
@@ -397,14 +399,20 @@ def main():
     # Create table:
     if Create_new_table:
         our_import.create_table()
-    if In_jyptr:
-        Tunnel.stop()
+    #TODO remove if In_jyptr:
+    #TODO remove     Tunnel.stop()
     # Import study1:
+    # Tunnel = None
     if Import_study1:
         study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
                              geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
+        #TODO study1 = ImportStudy(the_file="Phase 1 Sediment SMALL.csv", study_name="Phase1Sediment", study_year=2005,
+        #TODO                      sample_type="Sediment",
+        #TODO                      geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
         study1.run_import()
+    if In_jyptr:
+        Tunnel.stop()
 
 
 if __name__ == '__main__':
