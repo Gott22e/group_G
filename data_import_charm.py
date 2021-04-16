@@ -6,32 +6,114 @@ Upper Columbia River Site database.
 Program is designed to be run from within the juyptr notebook "data_import.ipynb".
 (This is required for password management and tunneling.)
 
-Updated: 2021/04/15
+Updated: 2021/04/16
+
+For issues with this script, contact Allison Nau.
 """
 # Import packages
 import sshtunnel
 import getpass
 import pandas as pd
 import pymysql
+import pickle
+import os
 import numpy as np
 import sqlalchemy
+# Requires xlrd, openpyxl for pandas excel support:
+import xlrd
+import openpyxl
+
+# TODO: TEST UCR_2009_BeachSD insert statement, then try to insert through juyptr
+# TODO: may need to break up insert statements into smaller statements?
+# TODO: confirm that the number of rows inserted match the dataset
 
 # TODO deal with NaN, None, Null, etc.
+# TODO handle "_dup" pseudo duplicated columns
+# TODO: count rows for each study is correct
+# TODO: see if rinse blanks made it in
+# TODO: "UserWarning: Cannot parse header or footer so it will be ignored
+#   warn("""Cannot parse header or footer so it will be ignored""")"
+# TODO: determine what are private methods and change
+
 
 # Global variables:
-Create_new_table = True
-In_jyptr = True  # TODO fix
 Tunnel = None
+Username = "anau"  # TODO confirm this works
+
+# Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = False  # TODO fix
+In_pycharm = True  # TODO fix
+In_jyptr = False  # TODO fix
 Import_study1 = True
-# TODO: make global username variable
+Import_study2 = True
+Create_new_table = True
+
+
+class KnownStudyTemplates:
+    """
+    One object of this class stores templates for each recognized study template.
+    """
+
+    def __init__(self):
+        """
+        Initializes one KnownStudyTemplates object.
+        """
+        # Dictionary of study templates:
+        self.templates = [
+            [['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
+              'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+              'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+              'composite_type', 'taxon', 'sample_material', 'sample_description',
+              'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+              'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+              'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+              'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+              'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+              'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
+              'river_mile', 'x_coord', 'y_coord', 'srid']],
+            [['study_loc_id', 'location_id', 'principal_doc', 'lab', 'lab_pkg',
+                                 'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                                 'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                                 'composite_type', 'taxon', 'sample_material', 'sample_description',
+                                 'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                                 'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                                 'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                                 'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                                 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                                 'rejected', 'greater_than', 'tic', 'reportable', 'comments',
+                                 'river_mile', 'x_coord', 'y_coord', 'srid'],
+                                 ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid',
+                                 'lat_WGS84_auto_calculated_only_for_mapping',
+                                 'lon_WGS84_auto_calculated_only_for_mapping']]
+        ]
+        print(f"Length of study templates: {len(self.templates)}")  # TODO remove
+        # Dictionary of studies and what template to use:
+        self.study_temps = {}
+        # If study saved templates have been made:
+        if os.path.exists("saved_templates"):
+            temp = pickle.load(open("saved_templates", "rb"))
+            self.study_temps = temp.study_temps
+        # TODO expand functionality to handle other KnownStudyTemplate variables
+
+    def mod_temps(self):
+        # TODO
+        self.save_temps()
+        pass
+
+    def save_temps(self):
+        # TODO
+        pass
+
+    def load_temps(self):
+        # TODO
+        pass
 
 
 class ImportTools:
     """
     Class contains tools for importing data tables into database.
     """
+
     def __init__(self):
         """
         Initializes one ImportTools object.
@@ -40,6 +122,8 @@ class ImportTools:
         self.our_added_vars = ['study_name', 'study_year', 'sample_type', 'geo_cord_system', 'utm_cord_system']
         # Table name with bioed:
         self.table_name = "cr"
+        # Study templates:
+        self.known_templates = KnownStudyTemplates()
 
     @staticmethod
     def read_in_csv(filename, sep="|"):
@@ -54,6 +138,25 @@ class ImportTools:
         return temp_table
 
     @staticmethod
+    def read_in_excel(filename):
+        """
+        Reads in excel file "filename", returning a dictionary where the keys are the sheet names, and
+        the values are a pandas dataframe representing one sheet of data. Will skip sheets named "SQL used".
+        :param filename: excel file to read in.
+        :return: dictionary of pandas dataframes containing "filename" data/
+        """
+        table_dict = {}
+        whole = pd.ExcelFile(filename)
+        sheets = whole.sheet_names
+        for sheet in sheets:
+            if sheet != "SQL used":
+                print(f"Reading in sheet: {sheet}")
+                table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
+            else:
+                print(f"Skipping sheet: {sheet}")
+        return table_dict
+
+    @staticmethod
     def execute_query(query):
         """
         Executes mySQL query "query".
@@ -64,7 +167,7 @@ class ImportTools:
             # create the connection to the mysql database
             # If in juypter notebooks, ask user for password. Otherwise proceed using username "test".
             if In_jyptr:
-                connection = pymysql.connect(db='group_G', user='anau',
+                connection = pymysql.connect(db='group_G', user=Username,
                                              passwd=getpass.getpass(prompt='Password (bioed): ', stream=None),
                                              port=Tunnel.local_bind_port)
             else:
@@ -104,8 +207,9 @@ class ImportTools:
                      'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
                      'detection_limit', 'reporting_limit', 'undetected', 'estimated',
                      'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
-                     'river_mile', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid',
-                     'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping']
+                     'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                     'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                     'principal_doc_location']
         # Save file names as a text file:
         with open("column_names.txt", 'w') as my_file:
             for temp in self.our_added_vars:
@@ -116,7 +220,7 @@ class ImportTools:
         int_variables = ['lab_rep', "cas_rn", 'sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
         decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
-                             'river_mile', 'x_coord', 'y_coord', 'srid',
+                             'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
                              'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
                              'lon_WGS84_auto_calculated_only_for_mapping']
         date_variables = ['sample_date']
@@ -131,7 +235,7 @@ class ImportTools:
                             'undetected', 'estimated',
                             'rejected', 'greater_than', 'tic', 'reportable',
                             'alias_id',
-                            'analyte', 'full_name']
+                            'analyte', 'full_name', 'principal_doc_location']
         string_variables_long = ['comments']
         # Loop for variables to add (done this way to preserve order)
         for temp in full_list:
@@ -199,34 +303,30 @@ class ImportTools:
         return list(shared_cols), list(new_cols), list(miss_cols)
 
     @staticmethod
-    def clean_col_names():
-        # TODO
-        pass
-
-
-class KnownStudyTemplates:
-    """
-    One object of this class stores templates for each recognized study template.
-    """
-    def __init__(self):
-        # TODO
-        # Dictionary of study templates:
-        templates = {}
-        # Dictionary of studies and what template to use:
-        study_temps = {}
-
-    def mod_temps(self):
-        # TODO
-        self.save_temps()
-        pass
-
-    def save_temps(self):
-        # TODO
-        pass
-
-    def load_temps(self):
-        # TODO
-        pass
+    def clean_col_names(df):
+        """
+        Cleans up column names in pandas dataframe "df", returning the suggested new names as a list.
+        :param df: pandas dataframe.
+        :return: list of column names.
+        """
+        # TODO Should be called for read excel and read csv
+        # Current list of column names:
+        cols = list(df.columns)
+        new_names = []
+        # Name swaps to make:
+        dict_of_swaps = {"lat_wgs84_auto_calculated_only_for_mapping": "lat_WGS84_auto_calculated_only_for_mapping",
+                         "lon_wgs84_auto_calculated_only_for_mapping": "lon_WGS84_auto_calculated_only_for_mapping"}
+        # Replace undesired characters with _
+        for col in cols:
+            new_col = col.lower()
+            for char in ["(", ")", ":", ";", " ", "-"]:
+                new_col = new_col.replace(char, "_")
+            for _ in range(5):
+                new_col = new_col.replace("__", "_")
+            if new_col in dict_of_swaps:
+                new_col = dict_of_swaps[new_col]
+            new_names.append(new_col)
+        return new_names
 
 
 class ImportStudy(ImportTools):
@@ -234,7 +334,9 @@ class ImportStudy(ImportTools):
     One object of this class contains variables and methods required to import data from a study into the database.
     Inherits from ImportTools.
     """
-    def __init__(self, the_file, study_name, study_year, sample_type, geo_cord_system, utm_cord_system):
+
+    def __init__(self, the_file, study_name, study_year, sample_type, geo_cord_system, utm_cord_system,
+                 is_csv=True, special_header=False):
         """
         Initializes one ImportStudy object.
         :param the_file: csv or excel file containing study data.
@@ -243,23 +345,78 @@ class ImportStudy(ImportTools):
         :param sample_type: string containing study type.
         :param geo_cord_system: string specifying coordinate system used in x & y coordinate columns.
         :param utm_cord_system: string specifying coordinate system used in x & y utm coordinate columns.
+        :param is_csv: boolean specifying if input file is a csv (True, default) or an excel file.
+        :param special_header: boolean specifying if there is formatting in header of excel file that
+        must be adhered to.
         """
         # Initialize variables from parent:
         super().__init__()
         # Initialize variables:
         self.the_file = the_file
-        self.table = self.read_in_csv(filename=self.the_file)
+        self.is_csv = is_csv
         self.study_name = study_name
         self.study_year = study_year
         self.sample_type = sample_type
         self.geo_cord_system = geo_cord_system
         self.utm_cord_system = utm_cord_system
-        self.finish_building_table()  # Finish building table, including columns not included in csv file.
+        self.special_header = special_header
+        self.use_template = None
+        self.col_names_by_sheet = {}
         self.col_names = []  # All column names within study
         self.shared_cols = []  # All shared columns with reference file
         self.new_cols = []  # All new columns that were not present in reference file
         self.miss_cols = []  # All columns that are in the master database table but not present in the current study
         self.insert_statement = ""
+        # Read in study (self.table will be a pandas dataframe if is_csv is True, otherwise will be
+        # a list of pandas dataframes:
+        self.table = self.read_in_study(filename=self.the_file)
+        # Compare column headers with other studies to see what templates make sense:
+        self.compare_with_other_studies()
+        # If study was an excel file, combine into one table, according to template in self.use_template
+        if not self.is_csv:
+            self.combine_sheets()
+        # If template was found, go ahead and add columns with the study info:
+        if self.use_template is not None:
+            self.finish_building_table()  # Finish building table, including added columns with study info
+        # Compare columns of current study to master database table and references:
+        self.check_columns()
+
+    def read_in_study(self, filename):
+        """
+        Read in data stored in "filename".
+        :param filename: excel or csv file containing data.
+        :return: dataframe (csv) or list of dataframes (excel) containing study data.
+        """
+        if self.is_csv:  # TODO: Template 0?
+            table = ImportTools.read_in_csv(filename)
+            self.col_names_by_sheet["sheet1"] = table.columns
+        else:
+            table = ImportTools.read_in_excel(filename)
+            for t in table:
+                table[t].columns = self.clean_col_names(table[t])
+                self.col_names_by_sheet[t] = table[t].columns
+        return table
+
+    def combine_sheets(self):
+        """
+        Combines sheets that were stored in study's excel data file, according to template.
+        This should not be used if template is unknown.
+        """
+        template = self.use_template
+        temp_table = None
+        print(f"Template to use: {template}")
+        if template == 1:
+            # TODO: need to confirm this is OK renamed column for all studies of this template
+            # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
+            self.table["labresult"].rename({"river_mile": "river_mile_dup",
+                                                    "srid": "srid_dup"}, axis='columns', inplace=True)
+            self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
+            # Merge sheets:
+            temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
+        if temp_table is not None:
+            print("New columns:")
+            print(temp_table.columns)
+            self.table = temp_table
 
     def finish_building_table(self):
         """
@@ -270,7 +427,7 @@ class ImportStudy(ImportTools):
         self.table.insert(2, column="sample_type", value=self.sample_type)
         self.table.insert(3, column="geo_cord_system", value=self.geo_cord_system)
         self.table.insert(4, column="utm_cord_system", value=self.utm_cord_system)
-        # TODO: handle missing filling in missing columns?
+        # TODO: handle missing filling in missing columns? -> probably not necessary
         print("Column names after table built:")
         print(self.table.columns)
 
@@ -278,8 +435,6 @@ class ImportStudy(ImportTools):
         """
         Runs import of current data table.
         """
-        # Compare columns of current study to master database table:
-        self.check_columns()
         # If there are not missing columns in the master database table, go ahead and insert data:
         if len(self.new_cols) != 0:
             print("There are new columns, table columns must be modified before proceeding!!!!!")
@@ -288,23 +443,12 @@ class ImportStudy(ImportTools):
             self.make_insert_statement()
             # Grab global variable:
             global Tunnel
-            # TODO: does this need to be here because other wise times out?
-            # Connect with database and execute insert statment:
+            # Connect with database and execute insert statement:
             if In_jyptr:
-                #TODO remove # connect to bioed via an ssh tunnel
-                #TODO remove # do NOT include your password, use getpass
-                #TODO remove Tunnel = sshtunnel.SSHTunnelForwarder(
-                #TODO remove     ('bioed.bu.edu', 22),
-                #TODO remove     ssh_username='anau',
-                #TODO remove     ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
-                #TODO remove     remote_bind_address=('localhost', 4253))
-                # the password requested here is your kerberos password that you use to access bioed
-                # "activate" the ssh tunnel
-                #TODO REMOVE  Tunnel.start()
                 self.execute_query(self.insert_statement)
-                #TODO REMOVE  Tunnel.stop()
         # TODO: modify to raise error?
-        pass
+        # Save current known templates:
+        pickle.dump(self.known_templates, open("saved_templates", "wb"))
 
     def check_columns(self):
         """
@@ -323,12 +467,46 @@ class ImportStudy(ImportTools):
         print("Columns that are missing:")
         print(self.miss_cols)
 
-    def make_insert_statement(self, save_to="temp_insert.txt"):
+    def compare_with_other_studies(self):
+        """
+        Compares column names in the different sheets (or single sheet) of excel/csv file, checking to see
+        if a template made for a previous study can be used.
+        """
+        found_template = False
+        num_sheets_in_study = len(self.col_names_by_sheet)
+        # Check if study has been loaded in previously:
+        if self.study_name in self.known_templates.study_temps:
+            self.use_template = self.known_templates.study_temps[self.study_name]
+            found_template = True
+            print(f"Study has been seen before, use template #: {self.use_template}")
+        # If study hasn't been loaded previous, check if column names in all relevant sheets match a known template:
+        # (Will not work correctly if there are duplicate sheets within an excel file).
+        else:
+            for i in range(len(self.known_templates.templates)):
+                matching_sheets = 0
+                for sheet1 in self.col_names_by_sheet:
+                    for sheet2 in self.known_templates.templates[i]:
+                        if set(self.col_names_by_sheet[sheet1]) == set(sheet2):
+                            matching_sheets += 1
+                if matching_sheets == num_sheets_in_study:
+                    found_template = True
+                    self.use_template = i
+                    self.known_templates.study_temps[self.study_name] = i
+                    print(f"Study matching template found, template #: {i}")
+                    break
+                    # TODO: test!!!!!!!
+            if not found_template:
+                print("STUDY TEMPLATE NOT FOUND, must be created")
+
+    def make_insert_statement(self, save_to=None):
         """
         Makes insert statement string for current data table and saves in file "save_to".
-        :param save_to: text file to save insert statement to, default "temp_insert.txt"
+        :param save_to: text file to save insert statement to, default self.study_name + "_temp_insert.txt"
         """
-        # Initialize insert statment with header:
+        # Save file to:
+        if save_to is None:
+            save_to = self.study_name + "_temp_insert.txt"
+        # Initialize insert statement with header:
         insert_string = self.insert_header()
         insert_string += " \nValues "
         # Copy and modify datatable for use in making string:
@@ -352,10 +530,10 @@ class ImportStudy(ImportTools):
             insert_string += "), \n"
         # Finish off insertion string and save in self.insert_statement and to temp_insert.txt
         insert_string = insert_string[:-3]
-        insert_string += ";"  # TODO: does floating semicolon work?
+        insert_string += ";"
         self.insert_statement = insert_string
         # Save insert statement to file:
-        # Does this append or overwrite in juyptr?
+        # TODO: Does this append or overwrite in juyptr?
         with open(save_to, "w") as my_file:
             my_file.write(self.insert_statement)
 
@@ -390,7 +568,7 @@ def main():
         # do NOT include your password, use getpass
         Tunnel = sshtunnel.SSHTunnelForwarder(
             ('bioed.bu.edu', 22),
-            ssh_username='anau',
+            ssh_username=Username,
             ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
             remote_bind_address=('localhost', 4253))
         # the password requested here is your kerberos password that you use to access bioed
@@ -399,31 +577,22 @@ def main():
     # Create table:
     if Create_new_table:
         our_import.create_table()
-    #TODO remove if In_jyptr:
-    #TODO remove     Tunnel.stop()
     # Import study1:
     # Tunnel = None
     if Import_study1:
         study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
                              geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
-        #TODO study1 = ImportStudy(the_file="Phase 1 Sediment SMALL.csv", study_name="Phase1Sediment", study_year=2005,
-        #TODO                      sample_type="Sediment",
-        #TODO                      geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
         study1.run_import()
+    if Import_study2:
+        study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
+        study2.run_import()
+        # TODO: handle "RinseBlank" in location table
     if In_jyptr:
         Tunnel.stop()
 
 
 if __name__ == '__main__':
     main()
-
-# TODO: class to pickle data templates
-
-# TODO: use a modfied version of creating temporary SQL tables, but with certain columns forced?
-# TODO: class to create temporary SQL tables
-
-# TODO: class to check if data template already exists, and import
-
-# TODO: class to import novel data template & save
-# TODO: Function to add new column to already created sql table?
