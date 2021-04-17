@@ -17,6 +17,7 @@ import pandas as pd
 import pymysql
 import pickle
 import os
+import math
 import numpy as np
 import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
@@ -35,6 +36,7 @@ import openpyxl
 #   warn("""Cannot parse header or footer so it will be ignored""")"
 # TODO: determine what are private methods and change
 
+#TODO row count to make sure everything is there
 
 # Global variables:
 Tunnel = None
@@ -47,6 +49,22 @@ In_jyptr = False  # TODO fix
 Import_study1 = True
 Import_study2 = True
 Create_new_table = True
+
+
+class NoKnownTemplate(Exception):
+    """
+    Raised when data file structure is not recognized.
+    """
+    # TODO: enable this!!! (Instead of the print statments)
+    pass
+
+
+class DatatypeError(Exception):
+    """
+    Raised when there is a data of the wrong type within a column that has been uploaded to be imported.
+    """
+    # TODO enable this!!! (Instead of print statements)
+    pass
 
 
 class KnownStudyTemplates:
@@ -124,6 +142,42 @@ class ImportTools:
         self.table_name = "cr"
         # Study templates:
         self.known_templates = KnownStudyTemplates()
+        # Variables to have in create table statement (in addition to our added variables):
+        self.full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
+                     'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                     'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                     'composite_type', 'taxon', 'sample_material', 'sample_description',
+                     'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                     'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                     'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                     'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                     'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                     'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
+                     'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                     'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                     'principal_doc_location']
+        # Variable types:
+        self.int_variables = ['lab_rep', 'sig_figs', 'detection_limit', 'reporting_limit']
+        # TODO: have two different sizes of decimal values?
+        self.decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
+                             'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
+                             'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
+                             'lon_WGS84_auto_calculated_only_for_mapping']
+        self.date_variables = ['sample_date']
+        # TODO: is lab_conc_qual really string?
+        # TODO: is cas_rn OK as a string?
+        # TODO: booleans currently as strings: 'undetected', 'estimated',
+        #        'rejected', 'greater_than', 'tic', 'reportable',
+        self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample',
+                            'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
+                            'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type',
+                            'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
+                            'qa_level', 'lab_conc_qual', 'validator_flags',
+                            'undetected', 'estimated',
+                            'rejected', 'greater_than', 'tic', 'reportable',
+                            'alias_id', "cas_rn",
+                            'analyte', 'full_name', 'principal_doc_location']
+        self.string_variables_long = ['comments']
 
     @staticmethod
     def read_in_csv(filename, sep="|"):
@@ -196,59 +250,24 @@ class ImportTools:
         create_string += "sample_type VARCHAR(200), \n"
         create_string += "geo_cord_system VARCHAR(100), \n"
         create_string += "utm_cord_system VARCHAR(100), \n"
-        # Variables to add (full_list controls order of columns in database):
-        full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
-                     'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                     'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                     'composite_type', 'taxon', 'sample_material', 'sample_description',
-                     'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                     'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                     'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                     'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                     'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                     'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
-                     'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
-                     'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
-                     'principal_doc_location']
         # Save file names as a text file:
         with open("column_names.txt", 'w') as my_file:
             for temp in self.our_added_vars:
                 my_file.write(f"{temp}\n")
-            for temp in full_list:
+            for temp in self.full_list:
                 my_file.write(f"{temp}\n")
-        # Variable types:
-        int_variables = ['lab_rep', "cas_rn", 'sig_figs', 'detection_limit', 'reporting_limit']
-        # TODO: have two different sizes of decimal values?
-        decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
-                             'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
-                             'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
-                             'lon_WGS84_auto_calculated_only_for_mapping']
-        date_variables = ['sample_date']
-        # TODO: is lab_conc_qual really string?
-        # TODO: booleans currently as strings: 'undetected', 'estimated',
-        #        'rejected', 'greater_than', 'tic', 'reportable',
-        string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample',
-                            'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
-                            'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type',
-                            'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
-                            'qa_level', 'lab_conc_qual', 'validator_flags',
-                            'undetected', 'estimated',
-                            'rejected', 'greater_than', 'tic', 'reportable',
-                            'alias_id',
-                            'analyte', 'full_name', 'principal_doc_location']
-        string_variables_long = ['comments']
         # Loop for variables to add (done this way to preserve order)
-        for temp in full_list:
+        for temp in self.full_list:
             create_string += f"{temp} "
-            if temp in string_variables:
+            if temp in self.string_variables:
                 create_string += "VARCHAR(100)"
-            elif temp in int_variables:
+            elif temp in self.int_variables:
                 create_string += "INT"
-            elif temp in decimal_variables:
+            elif temp in self.decimal_variables:
                 create_string += "DECIMAL(40,15)"
-            elif temp in date_variables:
+            elif temp in self.date_variables:
                 create_string += f"DATETIME"
-            elif temp in string_variables_long:
+            elif temp in self.string_variables_long:
                 # TODO is this really best way to do this for comments?
                 create_string += "VARCHAR(1000)"
             else:
@@ -329,6 +348,7 @@ class ImportTools:
         return new_names
 
 
+
 class ImportStudy(ImportTools):
     """
     One object of this class contains variables and methods required to import data from a study into the database.
@@ -367,6 +387,7 @@ class ImportStudy(ImportTools):
         self.new_cols = []  # All new columns that were not present in reference file
         self.miss_cols = []  # All columns that are in the master database table but not present in the current study
         self.insert_statement = ""
+        self.insert_statement_list = []  # List of alternative insert statements to be inserted one at a time
         # Read in study (self.table will be a pandas dataframe if is_csv is True, otherwise will be
         # a list of pandas dataframes:
         self.table = self.read_in_study(filename=self.the_file)
@@ -406,17 +427,34 @@ class ImportStudy(ImportTools):
         temp_table = None
         print(f"Template to use: {template}")
         if template == 1:
-            # TODO: need to confirm this is OK renamed column for all studies of this template
-            # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
-            self.table["labresult"].rename({"river_mile": "river_mile_dup",
-                                                    "srid": "srid_dup"}, axis='columns', inplace=True)
-            self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
-            # Merge sheets:
-            temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
+            temp_table = self.template1_clean()
         if temp_table is not None:
             print("New columns:")
             print(temp_table.columns)
             self.table = temp_table
+
+    def template1_clean(self):
+        # TODO: need to confirm this is OK renamed column for all studies of this template
+        # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
+        self.table["labresult"].rename({"river_mile": "river_mile_dup",
+                                        "srid": "srid_dup"}, axis='columns', inplace=True)
+        self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
+        # Merge sheets:
+        temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
+        temp_table = self.clean_numeric_cols_of_nulls(temp_table)
+        return temp_table
+
+    def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
+        # TODO
+        # Remove nulls in numerical columns:
+        cols = self.int_variables + self.decimal_variables
+        for col in cols:
+            try:
+                df[col].replace({missing: "Null"}, inplace=True)
+            except KeyError:
+                print(f"No column named: {col}")
+        # TODO finish
+        return df
 
     def finish_building_table(self):
         """
@@ -466,6 +504,8 @@ class ImportStudy(ImportTools):
         print(self.new_cols)
         print("Columns that are missing:")
         print(self.miss_cols)
+        # Check column datatypes:
+        self.column_types(self.table)
 
     def compare_with_other_studies(self):
         """
@@ -498,6 +538,27 @@ class ImportStudy(ImportTools):
             if not found_template:
                 print("STUDY TEMPLATE NOT FOUND, must be created")
 
+    def column_types(self, df):
+        # TODO
+        # Any mixed datatypes present?
+        mixed_bool = False
+        list_of_mix = []
+        print("Datatypes in dataframe:")
+        for (name, data) in df.iteritems():
+            print(f"Column Name: {name}")
+            my_dtype = df.dtypes[name]
+            print(f"Datatype: {my_dtype}")
+            if my_dtype == "object":
+                mixed_bool = True
+                list_of_mix.append(name)
+        print(f"Mixed column datatypes present in dataset: {mixed_bool}")
+        print(f"Columns with mixed datatypes present:")
+        print(list_of_mix)
+        # TODO: raise error with mismatches
+        df.info()
+        return mixed_bool, list_of_mix
+    # TODO: finish implementing this column type function
+
     def make_insert_statement(self, save_to=None):
         """
         Makes insert statement string for current data table and saves in file "save_to".
@@ -520,10 +581,10 @@ class ImportStudy(ImportTools):
             for temp in row:
                 # If temp is not a int, float, or "Null", surround with quotations:
                 if not (isinstance(temp, int) or isinstance(temp, float) or temp == "Null"):
-                    temp = f"'{temp}'"
+                    temp = f'"{temp}"'
                 # If temp is a boolean, not in mySQL format, surround with quotations:
                 elif isinstance(temp, bool):
-                    temp = f"'{temp}'"
+                    temp = f'"{temp}"'
                 insert_string += f"{temp}, "
             # Finish off row in insert string:
             insert_string = insert_string[:-2]
@@ -536,6 +597,39 @@ class ImportStudy(ImportTools):
         # TODO: Does this append or overwrite in juyptr?
         with open(save_to, "w") as my_file:
             my_file.write(self.insert_statement)
+        self.make_smaller_insert_statements(save_to)
+
+    def make_smaller_insert_statements(self, master_statement, perfile=500):
+        # TODO
+        lines = []
+        with open(master_statement, "r") as my_file:
+            header = my_file.readline()
+            for line in my_file:
+                lines.append(line)
+        # Number of rows to insert:
+        rows = len(lines)
+        files_to_make = math.ceil(rows/perfile)
+        print(f"Files to make: {files_to_make}")  # TODO remove
+        print(f"Number of rows: {rows}")  # TODO remove
+        file_num = 0
+        for f in range(files_to_make):
+            start = 0 + f*perfile
+            end = (f + 1) * perfile
+            if f == 0:
+                temp = " ".join([header] + lines[start:end])
+            else:
+                temp = " ".join([header] + [" Values"] + lines[start:end])
+            if temp[-1] == "\n":
+                temp = temp[:-1]
+            if temp[-1] == " ":
+                temp = temp[:-1]
+            if temp[-1] == ",":
+                temp = temp[:-1] + ";"
+            filename = f"{self.study_name}_temp_insert_partial_{f}"
+            with open(filename, "w") as my_file2:
+                my_file2.write(temp)
+            print(f"You are here {f}")
+        # TODO: make sure not missing last line
 
     def insert_header(self):
         """
