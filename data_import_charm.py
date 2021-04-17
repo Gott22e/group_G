@@ -53,7 +53,8 @@ Import_study2 = False  # UCR_2009_BeachSD
 Import_study3 = False  # UCR_2010_BeachSD
 Import_study4 = False  # UCR_2011_BeachSD
 Import_study5 = True  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
-# TODO: remove duplicated location rows
+# TODO: remove duplicated location rows -> coming from different principal docs
+# TODO: check how duplicated rows were handle with the drop_duplicates lines of code
 Import_study6 = False  # Bossburg  # TODO: need to modify tables
 Create_new_table = True
 Partial_insert = False
@@ -198,6 +199,7 @@ class ImportTools:
         Static method.
         """
         temp_table = pd.read_csv(filename, sep=sep, header=1)
+        temp_table.drop_duplicates(inplace=True)  # TODO: does this work properly?
         return temp_table
 
     @staticmethod
@@ -220,9 +222,12 @@ class ImportTools:
                 elif filename.endswith("xls"):
                     table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
                 else:
-                    print("File name extension is nto recognized")
+                    print("File name extension is not recognized")
             else:
                 print(f"Skipping sheet: {sheet}")
+        # Drop duplicate rows:  # TODO Does this work well enough?
+        for sheet in table_dict:
+            table_dict[sheet].drop_duplicates(inplace=True)
         return table_dict
 
     @staticmethod
