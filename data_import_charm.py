@@ -55,6 +55,8 @@ Import_study4 = False  # UCR_2011_BeachSD
 Import_study5 = True  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
 # TODO: remove duplicated location rows -> coming from different principal docs
 # TODO: check how duplicated rows were handle with the drop_duplicates lines of code
+# TODO: Use a modified groupby, a la:
+# https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
 Import_study6 = False  # Bossburg  # TODO: need to modify tables
 Create_new_table = True
 Partial_insert = False
