@@ -44,10 +44,11 @@ Username = "anau"  # TODO confirm this works
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
+In_pycharm = False # TODO fix
+In_jyptr = True  # TODO fix
 Import_study1 = True
 Import_study2 = True
+Import_study3 = True
 Create_new_table = True
 
 
@@ -205,7 +206,7 @@ class ImportTools:
         for sheet in sheets:
             if sheet != "SQL used":
                 print(f"Reading in sheet: {sheet}")
-                table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
+                table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet, engine="openpyxl")
             else:
                 print(f"Skipping sheet: {sheet}")
         return table_dict
@@ -453,6 +454,8 @@ class ImportStudy(ImportTools):
                 df[col].replace({missing: "Null"}, inplace=True)
             except KeyError:
                 print(f"No column named: {col}")
+            except TypeError:
+                print(f"Can't make numeric to string comparison in numeric pandas column {col}")
         # TODO finish
         return df
 
@@ -674,16 +677,24 @@ def main():
     # Import study1:
     # Tunnel = None
     if Import_study1:
+        print("Importing study 1:")
         study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
                              geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
         study1.run_import()
     if Import_study2:
+        print("Importing study 2:")
         study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
                              geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
+    if Import_study3:
+        print("Importing study 3:")
+        study3 = ImportStudy(the_file="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_csv=False)
+        study3.run_import()
     if In_jyptr:
         Tunnel.stop()
 
