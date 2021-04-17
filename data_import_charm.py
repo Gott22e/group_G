@@ -37,6 +37,7 @@ import openpyxl
 # TODO: determine what are private methods and change
 
 #TODO row count to make sure everything is there
+# TODO compare insert string between juyptr and pycharm
 
 # Global variables:
 Tunnel = None
@@ -44,12 +45,16 @@ Username = "anau"  # TODO confirm this works
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = False # TODO fix
-In_jyptr = True  # TODO fix
-Import_study1 = True
-Import_study2 = True
-Import_study3 = True
+In_pycharm = True  # TODO fix
+In_jyptr = False  # TODO fix
+Import_study1 = True  # Phase 1 sediment
+Import_study2 = True  # UCR_2009_BeachSD
+Import_study3 = False  # UCR_2010_BeachSD  # TODO Test is juyptr
+Import_study4 = False  # UCR_2011_BeachSD  # TODO test
+Import_study5 = False  # Phase 2 Sediment Teck Data  # TODO test
+Import_study6 = False  # Bossburg  # TODO: need to modify tables
 Create_new_table = True
+Partial_insert = False
 
 
 class NoKnownTemplate(Exception):
@@ -158,7 +163,7 @@ class ImportTools:
                      'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
                      'principal_doc_location']
         # Variable types:
-        self.int_variables = ['lab_rep', 'sig_figs', 'detection_limit', 'reporting_limit']
+        self.int_variables = ['sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
         self.decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
                              'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
@@ -167,6 +172,7 @@ class ImportTools:
         self.date_variables = ['sample_date']
         # TODO: is lab_conc_qual really string?
         # TODO: is cas_rn OK as a string?
+        # TODO is lab_rep OK as string?
         # TODO: booleans currently as strings: 'undetected', 'estimated',
         #        'rejected', 'greater_than', 'tic', 'reportable',
         self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample',
@@ -176,7 +182,7 @@ class ImportTools:
                             'qa_level', 'lab_conc_qual', 'validator_flags',
                             'undetected', 'estimated',
                             'rejected', 'greater_than', 'tic', 'reportable',
-                            'alias_id', "cas_rn",
+                            'alias_id', "cas_rn", 'lab_rep',
                             'analyte', 'full_name', 'principal_doc_location']
         self.string_variables_long = ['comments']
 
@@ -196,7 +202,8 @@ class ImportTools:
     def read_in_excel(filename):
         """
         Reads in excel file "filename", returning a dictionary where the keys are the sheet names, and
-        the values are a pandas dataframe representing one sheet of data. Will skip sheets named "SQL used".
+        the values are a pandas dataframe representing one sheet of data.
+        Will skip sheets named "SQL used" or "history".
         :param filename: excel file to read in.
         :return: dictionary of pandas dataframes containing "filename" data/
         """
@@ -204,9 +211,14 @@ class ImportTools:
         whole = pd.ExcelFile(filename)
         sheets = whole.sheet_names
         for sheet in sheets:
-            if sheet != "SQL used":
+            if sheet != "SQL used" and sheet != "history":
                 print(f"Reading in sheet: {sheet}")
-                table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet, engine="openpyxl")
+                if filename.endswith("xlsx"):
+                    table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet, engine="openpyxl")
+                elif filename.endswith("xls"):
+                    table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
+                else:
+                    print("File name extension is nto recognized")
             else:
                 print(f"Skipping sheet: {sheet}")
         return table_dict
@@ -329,7 +341,6 @@ class ImportTools:
         :param df: pandas dataframe.
         :return: list of column names.
         """
-        # TODO Should be called for read excel and read csv
         # Current list of column names:
         cols = list(df.columns)
         new_names = []
@@ -347,7 +358,6 @@ class ImportTools:
                 new_col = dict_of_swaps[new_col]
             new_names.append(new_col)
         return new_names
-
 
 
 class ImportStudy(ImportTools):
@@ -411,6 +421,7 @@ class ImportStudy(ImportTools):
         """
         if self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename)
+            table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
             self.col_names_by_sheet["sheet1"] = table.columns
         else:
             table = ImportTools.read_in_excel(filename)
@@ -429,14 +440,31 @@ class ImportStudy(ImportTools):
         print(f"Template to use: {template}")
         if template == 1:
             temp_table = self.template1_clean()
+        else:  # If template is not known:
+            print("Not recognized template study")
+            for col, names in self.col_names_by_sheet.items():
+                shared_cols, new_cols, miss_cols = self.compare_column_names(names)
+                print(f"For sheet {col}:")
+                print("\tShared columns:")
+                print(f"\t{shared_cols}")
+                print("\tNew columns:")
+                print(f"\t{new_cols}")
+                print("\tMissing columns:")
+                print(f"\t{miss_cols}")
         if temp_table is not None:
             print("New columns:")
             print(temp_table.columns)
             self.table = temp_table
 
     def template1_clean(self):
+        """
+        Cleans up studies that follow template1, and combines into one dataframe.
+        :return: one cleaned up pandas dataframe.
+        """
         # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
+        if "labresults" in self.table:
+            self.table["labresult"] = self.table.pop("labresults")
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
@@ -446,7 +474,14 @@ class ImportStudy(ImportTools):
         return temp_table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
-        # TODO
+        """
+        Removes string parameter "missing" from entries in dataframe "df", only from columns that are expected to
+        contain numeric data. Used to replace null/na values with
+        the mySQL preferred "Null".
+        :param df: dataframe to replace "missing" values in.
+        :param missing: string representing the value to be replaced.
+        :return: cleaned dataframe.
+        """
         # Remove nulls in numerical columns:
         cols = self.int_variables + self.decimal_variables
         for col in cols:
@@ -456,7 +491,6 @@ class ImportStudy(ImportTools):
                 print(f"No column named: {col}")
             except TypeError:
                 print(f"Can't make numeric to string comparison in numeric pandas column {col}")
-        # TODO finish
         return df
 
     def finish_building_table(self):
@@ -468,7 +502,7 @@ class ImportStudy(ImportTools):
         self.table.insert(2, column="sample_type", value=self.sample_type)
         self.table.insert(3, column="geo_cord_system", value=self.geo_cord_system)
         self.table.insert(4, column="utm_cord_system", value=self.utm_cord_system)
-        # TODO: handle missing filling in missing columns? -> probably not necessary
+        # TODO: handle filling in missing columns? -> probably not necessary
         print("Column names after table built:")
         print(self.table.columns)
 
@@ -541,9 +575,16 @@ class ImportStudy(ImportTools):
             if not found_template:
                 print("STUDY TEMPLATE NOT FOUND, must be created")
 
-    def column_types(self, df):
-        # TODO
+    @staticmethod
+    def column_types(df):
+        """
+        Checks and print column datatypes in pandas dataframe "df".
+        :param df:
+        :return: tuple (mixed_bool, list_of_mix). "mixed_bool" is True if there are mixed/string datatypes present
+        (pandas object datatype). "list_of_mix" contains list of columns that contain pandas object datatypes.
+        """
         # Any mixed datatypes present?
+        # TODO (Strings also caught in this?)
         mixed_bool = False
         list_of_mix = []
         print("Datatypes in dataframe:")
@@ -600,11 +641,17 @@ class ImportStudy(ImportTools):
         # TODO: Does this append or overwrite in juyptr?
         with open(save_to, "w") as my_file:
             my_file.write(self.insert_statement)
-        self.make_smaller_insert_statements(save_to)
+        if Partial_insert:
+            self.make_smaller_insert_statements(save_to)
 
     def make_smaller_insert_statements(self, master_statement, perfile=500):
-        # TODO
+        """
+        Function makes smaller insert statements within text files for use in testing.
+        :param master_statement: text file containing master (large) insert_statement.
+        :param perfile: number of rows to include per smaller text file.
+        """
         lines = []
+        # Read in master inser statement file:
         with open(master_statement, "r") as my_file:
             header = my_file.readline()
             for line in my_file:
@@ -612,12 +659,11 @@ class ImportStudy(ImportTools):
         # Number of rows to insert:
         rows = len(lines)
         files_to_make = math.ceil(rows/perfile)
-        print(f"Files to make: {files_to_make}")  # TODO remove
-        print(f"Number of rows: {rows}")  # TODO remove
         file_num = 0
         for f in range(files_to_make):
             start = 0 + f*perfile
             end = (f + 1) * perfile
+            # Create string containing smaller insert statement:
             if f == 0:
                 temp = " ".join([header] + lines[start:end])
             else:
@@ -628,6 +674,7 @@ class ImportStudy(ImportTools):
                 temp = temp[:-1]
             if temp[-1] == ",":
                 temp = temp[:-1] + ";"
+            # Save smaller insert statement:
             filename = f"{self.study_name}_temp_insert_partial_{f}"
             with open(filename, "w") as my_file2:
                 my_file2.write(temp)
@@ -677,24 +724,43 @@ def main():
     # Import study1:
     # Tunnel = None
     if Import_study1:
-        print("Importing study 1:")
+        print("Importing study 1 (Phase 1 Sediment):")
         study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
                              geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
         study1.run_import()
     if Import_study2:
-        print("Importing study 2:")
+        print("Importing study 2 (UCR_2009_BeachSD):")
         study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
                              geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
     if Import_study3:
-        print("Importing study 3:")
+        print("Importing study 3 (UCR_2010_BeachSD):")
         study3 = ImportStudy(the_file="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
                              sample_type="Sediment",
                              geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_csv=False)
         study3.run_import()
+    if Import_study4:
+        print("Importing study 4 (UCR_2011_BeachSD):")
+        study4 = ImportStudy(the_file="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_csv=False)
+        study4.run_import()
+    if Import_study5:
+        print("Importing study 5 (Phase 2 Sediment Teck Data):")
+        study5 = ImportStudy(the_file="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
+                             study_year=2013,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_csv=False)
+        study5.run_import()
+    if Import_study6:
+        print("Importing study 6 (Bossburg Data):")
+        study6 = ImportStudy(the_file="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_csv=False)
+        study6.run_import()
     if In_jyptr:
         Tunnel.stop()
 
