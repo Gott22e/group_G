@@ -42,16 +42,18 @@ import openpyxl
 # Global variables:
 Tunnel = None
 Username = "anau"  # TODO confirm this works
+Bioed_pw = None  # TODO confirm this works
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = True  # TODO fix
 In_jyptr = False  # TODO fix
-Import_study1 = True  # Phase 1 sediment
-Import_study2 = True  # UCR_2009_BeachSD
-Import_study3 = False  # UCR_2010_BeachSD  # TODO Test is juyptr
-Import_study4 = False  # UCR_2011_BeachSD  # TODO test
-Import_study5 = False  # Phase 2 Sediment Teck Data  # TODO test
+Import_study1 = False  # Phase 1 sediment
+Import_study2 = False  # UCR_2009_BeachSD
+Import_study3 = False  # UCR_2010_BeachSD
+Import_study4 = False  # UCR_2011_BeachSD
+Import_study5 = True  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
+# TODO: remove duplicated location rows
 Import_study6 = False  # Bossburg  # TODO: need to modify tables
 Create_new_table = True
 Partial_insert = False
@@ -234,8 +236,9 @@ class ImportTools:
             # create the connection to the mysql database
             # If in juypter notebooks, ask user for password. Otherwise proceed using username "test".
             if In_jyptr:
+                global Bioed_pw
                 connection = pymysql.connect(db='group_G', user=Username,
-                                             passwd=getpass.getpass(prompt='Password (bioed): ', stream=None),
+                                             passwd=Bioed_pw,
                                              port=Tunnel.local_bind_port)
             else:
                 connection = pymysql.connect(user="test", password="test", db="group_G", port=4253)
@@ -515,12 +518,18 @@ class ImportStudy(ImportTools):
             print("There are new columns, table columns must be modified before proceeding!!!!!")
         else:
             # Make insert statement
-            self.make_insert_statement()
+            master_statement = self.make_insert_statement()
             # Grab global variable:
             global Tunnel
             # Connect with database and execute insert statement:
             if In_jyptr:
-                self.execute_query(self.insert_statement)
+                if len(self.table.index) <= 5000:
+                    self.execute_query(self.insert_statement)
+                else:
+                    smaller_statements = self.make_smaller_insert_statements(master_statement=master_statement,
+                                                                             perfile=2000)
+                    for query in smaller_statements:
+                        self.execute_query(query=query)
         # TODO: modify to raise error?
         # Save current known templates:
         pickle.dump(self.known_templates, open("saved_templates", "wb"))
@@ -607,6 +616,7 @@ class ImportStudy(ImportTools):
         """
         Makes insert statement string for current data table and saves in file "save_to".
         :param save_to: text file to save insert statement to, default self.study_name + "_temp_insert.txt"
+        :return: file name that master insert statement was saved to.
         """
         # Save file to:
         if save_to is None:
@@ -643,14 +653,17 @@ class ImportStudy(ImportTools):
             my_file.write(self.insert_statement)
         if Partial_insert:
             self.make_smaller_insert_statements(save_to)
+        return save_to
 
     def make_smaller_insert_statements(self, master_statement, perfile=500):
         """
         Function makes smaller insert statements within text files for use in testing.
         :param master_statement: text file containing master (large) insert_statement.
         :param perfile: number of rows to include per smaller text file.
+        :return: list of smaller insert statements
         """
         lines = []
+        statements = []
         # Read in master inser statement file:
         with open(master_statement, "r") as my_file:
             header = my_file.readline()
@@ -675,10 +688,11 @@ class ImportStudy(ImportTools):
             if temp[-1] == ",":
                 temp = temp[:-1] + ";"
             # Save smaller insert statement:
+            statements.append(temp)
             filename = f"{self.study_name}_temp_insert_partial_{f}"
             with open(filename, "w") as my_file2:
                 my_file2.write(temp)
-            print(f"You are here {f}")
+        return statements
         # TODO: make sure not missing last line
 
     def insert_header(self):
@@ -705,6 +719,7 @@ def main():
     """
     # Grab global variable:
     global Tunnel
+    global Bioed_pw
     # Set up sshtunnel (for juyptr notebook):
     our_import = ImportTools()
     if In_jyptr:
@@ -718,6 +733,8 @@ def main():
         # the password requested here is your kerberos password that you use to access bioed
         # "activate" the ssh tunnel
         Tunnel.start()
+        # Get the bioed password (once):
+        Bioed_pw = getpass.getpass(prompt='Password (bioed): ', stream=None)
     # Create table:
     if Create_new_table:
         our_import.create_table()
