@@ -42,10 +42,9 @@ print("<body>")
 
 print("<h1>Search Database</h1>")
 print('''<form name="Columbia River DB" onsubmit="return checkInput();" action="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/test.py" method="POST" >
-        Analyte: <input type="text" id = "name" name="name" value =""/>''')
-        
+        Analyte: <input type="text" id = "name" name="name" value =""/>
 #create queries
-#query = """SELECT analyte,upper_depth,lower_depth FROM cr_2"""
+query = """SELECT analyte,upper_depth,lower_depth FROM cr_2"""
 connection = pymysql.connect(user="test", password="test", db="group_G", port=4253)
 
 #create cursor
@@ -64,21 +63,6 @@ form = cgi.FieldStorage()
 analyte = form.getvalue("name")
 upper_depth = form.getvalue("upper depth")
 lower_depth = form.getvalue("lower depth")
-
-query = "SELECT analyte,upper_depth,lower_depth FROM cr_2 WHERE"
-
-to_join = []if analyte:
-	to_join.append(" analyte= %s" %(analyte))
-if upper_depth:
-        to_join.append(" upper_depth=%s" %(upper_depth))
-if lower_depth:
-        to_join.append(" lower_depth = %s" %(lower_depth))
-if sample_date:
-        to_join.append(" sample_date =%s" %(sample_date))
-        
-j = " and".join(to_join)
-
-final_query = query + j + ";"
 
 if analyte:
         print("<h2>Results</h2>")
@@ -121,6 +105,6 @@ function checkInput() {
   }
 }
 </script>
-''')
+''') % analyte_info
 
 print("</body></html>")
