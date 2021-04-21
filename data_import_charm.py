@@ -38,6 +38,8 @@ import openpyxl
 
 #TODO row count to make sure everything is there
 # TODO compare insert string between juyptr and pycharm
+# TODO test test
+# TODO accept arguments passed from elsewhere?
 
 # Global variables:
 Tunnel = None
@@ -461,7 +463,7 @@ class ImportStudy(ImportTools):
                 print(f"\t{new_cols}")
                 print("\tMissing columns:")
                 print(f"\t{miss_cols}")
-        if temp_table is not None:
+        if temp_table is not None:  # If temp_table was successfully built
             print("New columns:")
             print(temp_table.columns)
             self.table = temp_table
@@ -492,6 +494,7 @@ class ImportStudy(ImportTools):
         :param missing: string representing the value to be replaced.
         :return: cleaned dataframe.
         """
+        # TODO: do comparison in a way that isn't case sensitive?
         # Remove nulls in numerical columns:
         cols = self.int_variables + self.decimal_variables
         for col in cols:
@@ -499,7 +502,7 @@ class ImportStudy(ImportTools):
                 df[col].replace({missing: "Null"}, inplace=True)
             except KeyError:
                 print(f"No column named: {col}")
-            except TypeError:
+            except TypeError:  # TODO check type of column rather than catch
                 print(f"Can't make numeric to string comparison in numeric pandas column {col}")
         return df
 
@@ -708,6 +711,7 @@ class ImportStudy(ImportTools):
         :return: string containing header info for insert statement.
         """
         # Initialize string:
+        # Column order of pandas dataframe, not database
         build_str = f"INSERT INTO {self.table_name} ("
         # Specify order variables will be specified in insert statement:
         for temp in self.col_names:
@@ -796,4 +800,6 @@ if __name__ == '__main__':
 
 # TODO: Phase 3 sediment: skip field measures
 # TODO: do NOT skip field measurements for fish studies
-# TODO: no blanks in the database 
+# TODO: no blanks in the database
+# TODO: check for columns with same name with different info and let mae rose know
+# TODO: rename private
