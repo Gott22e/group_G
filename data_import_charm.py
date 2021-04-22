@@ -14,6 +14,7 @@ For issues with this script, contact Allison Nau.
 import sshtunnel
 import getpass
 import pandas as pd
+
 # Don't truncate columns:
 pd.set_option('display.max_columns', None)
 import pymysql
@@ -38,7 +39,7 @@ import openpyxl
 #   warn("""Cannot parse header or footer so it will be ignored""")"
 # TODO: determine what are private methods and change
 
-#TODO row count to make sure everything is there
+# TODO row count to make sure everything is there
 # TODO compare insert string between juyptr and pycharm
 # TODO test test
 # TODO accept arguments passed from elsewhere?
@@ -48,25 +49,25 @@ Tunnel = None
 Username = "anau"  # TODO confirm this works
 Bioed_pw = None  # TODO confirm this works
 
-
-
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = False  # TODO fix
-In_jyptr = True  # TODO fix
+In_pycharm = True  # TODO fix
+In_jyptr = False  # TODO fix
 Import_study1 = False  # Phase 1 sediment
 Import_study2 = False  # UCR_2009_BeachSD
 Import_study3 = False  # UCR_2010_BeachSD
 Import_study4 = False  # UCR_2011_BeachSD
-Import_study5 = True  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
+Import_study5 = False  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
 # TODO: remove duplicated location rows -> coming from different principal docs
 # TODO: check how duplicated rows were handle with the drop_duplicates lines of code
 # TODO: Use a modified groupby, a la:
 # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
-Import_study6 = False  # Bossburg  # TODO: need to modify tables
+Import_study6 = True  # Bossburg  # TODO: need to modify tables
 Create_new_table = True
-Partial_insert = False
+Partial_insert = True
 
+# TODO: does Bossburg insert statements work?
+# TODO: test that all previous studies still get inserted properly
 
 class NoKnownTemplate(Exception):
     """
@@ -107,20 +108,31 @@ class KnownStudyTemplates:
               'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
               'river_mile', 'x_coord', 'y_coord', 'srid']],
             [['study_loc_id', 'location_id', 'principal_doc', 'lab', 'lab_pkg',
-                                 'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                                 'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                                 'composite_type', 'taxon', 'sample_material', 'sample_description',
-                                 'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                                 'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                                 'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                                 'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                                 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                                 'rejected', 'greater_than', 'tic', 'reportable', 'comments',
-                                 'river_mile', 'x_coord', 'y_coord', 'srid'],
-                                 ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid',
-                                 'lat_WGS84_auto_calculated_only_for_mapping',
-                                 'lon_WGS84_auto_calculated_only_for_mapping']]
+              'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+              'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+              'composite_type', 'taxon', 'sample_material', 'sample_description',
+              'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+              'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+              'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+              'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+              'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+              'rejected', 'greater_than', 'tic', 'reportable', 'comments',
+              'river_mile', 'x_coord', 'y_coord', 'srid'],
+             ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid',
+              'lat_WGS84_auto_calculated_only_for_mapping',
+              'lon_WGS84_auto_calculated_only_for_mapping']],
+            [['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample', 'study_id',
+              'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+              'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type', 'upper_depth',
+              'lower_depth', 'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+              'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units', 'sig_figs', 'lab_flags', 'qa_level',
+              'lab_conc_qual', 'validator_flags', 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+              'rejected', 'greater_than', 'tic', 'reportable', 'nd_reported_to', 'qapp_deviation', 'nd_rationale',
+              'alias_id', 'comments', 'river_mile', 'x_coord', 'y_coord', 'elevation', 'elev_ft'],
+             ['location_id', 'river_mile', 'utm_x', 'utm_y', 'elevation', 'elev_unit']]
         ]
+        # TODO: implement template 2
+        # TODO: generalize template 1 and 2 together
         print(f"Length of study templates: {len(self.templates)}")  # TODO remove
         # Dictionary of studies and what template to use:
         self.study_temps = {}
@@ -161,40 +173,43 @@ class ImportTools:
         self.known_templates = KnownStudyTemplates()
         # Variables to have in create table statement (in addition to our added variables):
         self.full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
-                     'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                     'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                     'composite_type', 'taxon', 'sample_material', 'sample_description',
-                     'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                     'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                     'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                     'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                     'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                     'rejected', 'greater_than', 'tic', 'reportable', 'alias_id', 'comments',
-                     'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
-                     'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
-                     'principal_doc_location']
+                          'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                          'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                          'composite_type', 'taxon', 'sample_material', 'sample_description',
+                          'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                          'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                          'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                          'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                          'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                          'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
+                          'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
+                          'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                          'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                          'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
         # Variable types:
         self.int_variables = ['sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
         self.decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
-                             'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
-                             'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
-                             'lon_WGS84_auto_calculated_only_for_mapping']
+                                  'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
+                                  'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
+                                  'lon_WGS84_auto_calculated_only_for_mapping', 'elev_ft', 'elevation', 'elevation_dup']
         self.date_variables = ['sample_date']
         # TODO: is lab_conc_qual really string?
         # TODO: is cas_rn OK as a string?
         # TODO is lab_rep OK as string?
         # TODO: booleans currently as strings: 'undetected', 'estimated',
         #        'rejected', 'greater_than', 'tic', 'reportable',
-        self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample',
-                            'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
-                            'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type',
-                            'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
-                            'qa_level', 'lab_conc_qual', 'validator_flags',
-                            'undetected', 'estimated',
-                            'rejected', 'greater_than', 'tic', 'reportable',
-                            'alias_id', "cas_rn", 'lab_rep',
-                            'analyte', 'full_name', 'principal_doc_location']
+        self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
+                                 'labsample',
+                                 'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
+                                 'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type',
+                                 'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
+                                 'qa_level', 'lab_conc_qual', 'validator_flags',
+                                 'undetected', 'estimated',
+                                 'rejected', 'greater_than', 'tic', 'reportable',
+                                 'alias_id', "cas_rn", 'lab_rep',
+                                 'analyte', 'full_name', 'principal_doc_location',
+                                 'nd_rationale', 'qapp_deviation', 'nd_reported_to', 'elev_unit']
         self.string_variables_long = ['comments']
 
     @staticmethod
@@ -415,17 +430,19 @@ class ImportStudy(ImportTools):
         self.miss_cols = []  # All columns that are in the master database table but not present in the current study
         self.insert_statement = ""
         self.insert_statement_list = []  # List of alternative insert statements to be inserted one at a time
+        self.found_template = False
         # Read in study (self.table will be a pandas dataframe if is_csv is True, otherwise will be
         # a list of pandas dataframes:
         self.table = self.read_in_study(filename=self.the_file)
         # Compare column headers with other studies to see what templates make sense:
         self.compare_with_other_studies()
-        # If study was an excel file, combine into one table, according to template in self.use_template
-        if not self.is_csv:
-            self.combine_sheets()
-        # If template was found, go ahead and add columns with the study info:
-        if self.use_template is not None:
-            self.finish_building_table()  # Finish building table, including added columns with study info
+        if self.found_template:  # If template was found, proceed
+            # If study was an excel file, combine into one table, according to template in self.use_template
+            if not self.is_csv:
+                self.combine_sheets()
+            # If template was found, go ahead and add columns with the study info:
+            if self.use_template is not None:
+                self.finish_building_table()  # Finish building table, including added columns with study info
         # Compare columns of current study to master database table and references:
         self.check_columns()
 
@@ -456,6 +473,8 @@ class ImportStudy(ImportTools):
         print(f"Template to use: {template}")
         if template == 1:
             temp_table = self.template1_clean()
+        elif template == 2:
+            temp_table = self.template1_clean()
         else:  # If template is not known:
             print("Not recognized template study")
             for col, names in self.col_names_by_sheet.items():
@@ -476,6 +495,7 @@ class ImportStudy(ImportTools):
         """
         Cleans up studies that follow template1, and combines into one dataframe.
         :return: one cleaned up pandas dataframe.
+        # TODO update documentation regarding template 2
         """
         # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
@@ -484,6 +504,8 @@ class ImportStudy(ImportTools):
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
+        if self.use_template == 2:
+            self.table["labresult"].rename({"elevation": "elevation_dup"}, axis='columns', inplace=True)
         # Merge duplicated location information:
         # (group by everything BUT principal_doc_location
         # TODO FINISH, using
@@ -494,7 +516,8 @@ class ImportStudy(ImportTools):
         if "principal_doc_location" in group_by_cols:
             group_by_cols.remove("principal_doc_location")
             # TODO: change back to all group_by_cols
-            self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
+            self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(
+                ', '.join).reset_index()
         print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
@@ -540,34 +563,40 @@ class ImportStudy(ImportTools):
         """
         Runs import of current data table.
         """
-        # If there are not missing columns in the master database table, go ahead and insert data:
-        if len(self.new_cols) != 0:
-            print("There are new columns, table columns must be modified before proceeding!!!!!")
+        # If study template was found:
+        if self.found_template:
+            # If there are not missing columns in the master database table, go ahead and insert data:
+            if len(self.new_cols) != 0:
+                print("There are new columns, table columns must be modified before proceeding!!!!!")
+            else:
+                # Make insert statement
+                master_statement = self.make_insert_statement()
+                # Grab global variable:
+                global Tunnel
+                # Connect with database and execute insert statement:
+                if In_jyptr:
+                    if len(self.table.index) <= 5000:
+                        self.execute_query(self.insert_statement)
+                    else:
+                        smaller_statements = self.make_smaller_insert_statements(master_statement=master_statement,
+                                                                                 perfile=2000)
+                        for query in smaller_statements:
+                            self.execute_query(query=query)
+            # TODO: modify to raise error?
+            # Save current known templates:
+            pickle.dump(self.known_templates, open("saved_templates", "wb"))
         else:
-            # Make insert statement
-            master_statement = self.make_insert_statement()
-            # Grab global variable:
-            global Tunnel
-            # Connect with database and execute insert statement:
-            if In_jyptr:
-                if len(self.table.index) <= 5000:
-                    self.execute_query(self.insert_statement)
-                else:
-                    smaller_statements = self.make_smaller_insert_statements(master_statement=master_statement,
-                                                                             perfile=2000)
-                    for query in smaller_statements:
-                        self.execute_query(query=query)
-        # TODO: modify to raise error?
-        # Save current known templates:
-        pickle.dump(self.known_templates, open("saved_templates", "wb"))
+            print("Cannot import study if template is unknown")
 
-    def check_columns(self):
+    def _check_columns(self):
         """
         Compares column names of current data table with master database table.
         Save results in class attributes.
         Prints results.
+        Private method to be used by check_columns, if template hadn't been found it will store the
+        last sheet column information in tables.
+        TODO update doc
         """
-        self.col_names = list(self.table.columns)
         print("COLUMN NAMES:")
         print(self.col_names)
         self.shared_cols, self.new_cols, self.miss_cols = self.compare_column_names(self.col_names)
@@ -578,19 +607,39 @@ class ImportStudy(ImportTools):
         print("Columns that are missing:")
         print(self.miss_cols)
         # Check column datatypes:
-        self.column_types(self.table)
+        if not isinstance(self.table, dict):
+            self.column_types(self.table)
+
+    def check_columns(self):
+        # TODO
+        if isinstance(self.table, dict):
+            temp_list = []
+            print(f"Combining column names for all sheets")
+            for key in self.table:
+                print("You are here")  # TODO remove
+                new_columns = list(self.table[key].columns)
+                temp_list.append(new_columns)
+                print(f"For sheet '{key}', column names:")
+                print(new_columns)
+            for sublist in temp_list:
+                for item in sublist:
+                    self.col_names.append(item)
+        else:
+            self.col_names = list(self.table.columns)
+        print(self.col_names)  # TODO remove
+        self._check_columns()
 
     def compare_with_other_studies(self):
         """
         Compares column names in the different sheets (or single sheet) of excel/csv file, checking to see
         if a template made for a previous study can be used.
         """
-        found_template = False
+        self.found_template = False
         num_sheets_in_study = len(self.col_names_by_sheet)
         # Check if study has been loaded in previously:
         if self.study_name in self.known_templates.study_temps:
             self.use_template = self.known_templates.study_temps[self.study_name]
-            found_template = True
+            self.found_template = True
             print(f"Study has been seen before, use template #: {self.use_template}")
         # If study hasn't been loaded previous, check if column names in all relevant sheets match a known template:
         # (Will not work correctly if there are duplicate sheets within an excel file).
@@ -602,13 +651,13 @@ class ImportStudy(ImportTools):
                         if set(self.col_names_by_sheet[sheet1]) == set(sheet2):
                             matching_sheets += 1
                 if matching_sheets == num_sheets_in_study:
-                    found_template = True
+                    self.found_template = True
                     self.use_template = i
                     self.known_templates.study_temps[self.study_name] = i
                     print(f"Study matching template found, template #: {i}")
                     break
                     # TODO: test!!!!!!!
-            if not found_template:
+            if not self.found_template:
                 print("STUDY TEMPLATE NOT FOUND, must be created")
 
     @staticmethod
@@ -637,6 +686,7 @@ class ImportStudy(ImportTools):
         # TODO: raise error with mismatches
         df.info()
         return mixed_bool, list_of_mix
+
     # TODO: finish implementing this column type function
 
     def make_insert_statement(self, save_to=None):
@@ -698,10 +748,10 @@ class ImportStudy(ImportTools):
                 lines.append(line)
         # Number of rows to insert:
         rows = len(lines)
-        files_to_make = math.ceil(rows/perfile)
+        files_to_make = math.ceil(rows / perfile)
         file_num = 0
         for f in range(files_to_make):
-            start = 0 + f*perfile
+            start = 0 + f * perfile
             end = (f + 1) * perfile
             # Create string containing smaller insert statement:
             if f == 0:
@@ -822,3 +872,4 @@ if __name__ == '__main__':
 # TODO: rename private
 # TODO: handle data duplication
 # TODO: don't need field measurements for sediment, will need for biological
+# TODO: templates need to be able to handle deleted columns
