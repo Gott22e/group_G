@@ -46,6 +46,8 @@ Tunnel = None
 Username = "anau"  # TODO confirm this works
 Bioed_pw = None  # TODO confirm this works
 
+
+
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = True  # TODO fix
@@ -480,6 +482,13 @@ class ImportStudy(ImportTools):
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
+        # Merge duplicated location information:
+        # (group by everything BUT principal_doc_location
+        # TODO FINISH, using
+        # https://www.geeksforgeeks.org/select-all-columns-except-one-given-column-in-a-pandas-dataframe/
+        # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
+
+        self.table["locations"].groupby(self.table["locations"].columns != "principal_doc_location")['principal_doc_location']
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
         temp_table = self.clean_numeric_cols_of_nulls(temp_table)
