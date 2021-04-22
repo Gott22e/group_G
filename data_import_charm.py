@@ -57,14 +57,11 @@ Import_study1 = False  # Phase 1 sediment
 Import_study2 = False  # UCR_2009_BeachSD
 Import_study3 = False  # UCR_2010_BeachSD
 Import_study4 = False  # UCR_2011_BeachSD
-Import_study5 = False  # Phase 2 Sediment Teck Data # TODO THIS ENDED UP DUPLICATED BECAUSE THERE ARE DUPLICATE LOCATIONS
-# TODO: remove duplicated location rows -> coming from different principal docs
-# TODO: check how duplicated rows were handle with the drop_duplicates lines of code
-# TODO: Use a modified groupby, a la:
-# https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
-Import_study6 = True  # Bossburg  # TODO: need to modify tables
+Import_study5 = False  # Phase 2 Sediment Teck Data
+Import_study6 = False  # Bossburg  # TODO: need to make sure insert statments work, and this didn't break anything else
+Import_study7 = True  # Phase 3 sediment
 Create_new_table = True
-Partial_insert = True
+Partial_insert = False
 
 # TODO: does Bossburg insert statements work?
 # TODO: test that all previous studies still get inserted properly
@@ -129,10 +126,19 @@ class KnownStudyTemplates:
               'lab_conc_qual', 'validator_flags', 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
               'rejected', 'greater_than', 'tic', 'reportable', 'nd_reported_to', 'qapp_deviation', 'nd_rationale',
               'alias_id', 'comments', 'river_mile', 'x_coord', 'y_coord', 'elevation', 'elev_ft'],
-             ['location_id', 'river_mile', 'utm_x', 'utm_y', 'elevation', 'elev_unit']]
+             ['location_id', 'river_mile', 'utm_x', 'utm_y', 'elevation', 'elev_unit']],
+            [['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type', 'labsample', 'study_id',
+              'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+              'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type', 'upper_depth',
+              'lower_depth', 'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+              'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units', 'sig_figs', 'lab_flags', 'qa_level',
+              'lab_conc_qual', 'validator_flags', 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+              'rejected', 'greater_than', 'tic', 'reportable', 'nd_reported_to', 'qapp_deviation', 'nd_rationale',
+              'alias_id', 'comments', 'river_mile', 'x_coord', 'y_coord', 'srid'],
+             ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid']]
         ]
         # TODO: implement template 2
-        # TODO: generalize template 1 and 2 together
+        # TODO: generalize template 1 and 2 and 3 together
         print(f"Length of study templates: {len(self.templates)}")  # TODO remove
         # Dictionary of studies and what template to use:
         self.study_temps = {}
@@ -226,19 +232,21 @@ class ImportTools:
         return temp_table
 
     @staticmethod
-    def read_in_excel(filename):
+    def read_in_excel(filename, sample_type):
         """
         Reads in excel file "filename", returning a dictionary where the keys are the sheet names, and
         the values are a pandas dataframe representing one sheet of data.
         Will skip sheets named "SQL used" or "history".
         :param filename: excel file to read in.
         :return: dictionary of pandas dataframes containing "filename" data/
+        # TODO: update docs
         """
         table_dict = {}
         whole = pd.ExcelFile(filename)
         sheets = whole.sheet_names
         for sheet in sheets:
-            if sheet != "SQL used" and sheet != "history":
+            if sheet != "SQL used" and sheet != "history" and \
+                    not (sheet == "field measurements" and sample_type == "Sediment"):
                 print(f"Reading in sheet: {sheet}")
                 if filename.endswith("xlsx"):
                     table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet, engine="openpyxl")
@@ -457,7 +465,7 @@ class ImportStudy(ImportTools):
             table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
             self.col_names_by_sheet["sheet1"] = table.columns
         else:
-            table = ImportTools.read_in_excel(filename)
+            table = ImportTools.read_in_excel(filename, self.sample_type)
             for t in table:
                 table[t].columns = self.clean_col_names(table[t])
                 self.col_names_by_sheet[t] = table[t].columns
@@ -471,9 +479,7 @@ class ImportStudy(ImportTools):
         template = self.use_template
         temp_table = None
         print(f"Template to use: {template}")
-        if template == 1:
-            temp_table = self.template1_clean()
-        elif template == 2:
+        if template == 1 or template == 2 or template == 3:
             temp_table = self.template1_clean()
         else:  # If template is not known:
             print("Not recognized template study")
@@ -499,8 +505,11 @@ class ImportStudy(ImportTools):
         """
         # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
+        # TODO: manage these sheet names better! (maybe csv files should have drop down)
         if "labresults" in self.table:
             self.table["labresult"] = self.table.pop("labresults")
+        if "lab results" in self.table:
+            self.table["labresult"] = self.table.pop("lab results")
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
@@ -856,6 +865,12 @@ def main():
                              sample_type="Sediment",
                              geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_csv=False)
         study6.run_import()
+    if Import_study7:
+        print("Importing study 7 (Phase 3 Sediment):")
+        study7 = ImportStudy(the_file="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
+                             sample_type="Sediment",
+                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_csv=False)
+        study7.run_import()
     if In_jyptr:
         Tunnel.stop()
 
