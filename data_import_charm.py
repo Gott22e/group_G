@@ -14,6 +14,8 @@ For issues with this script, contact Allison Nau.
 import sshtunnel
 import getpass
 import pandas as pd
+# Don't truncate columns:
+pd.set_option('display.max_columns', None)
 import pymysql
 import pickle
 import os
@@ -50,8 +52,8 @@ Bioed_pw = None  # TODO confirm this works
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
+In_pycharm = False  # TODO fix
+In_jyptr = True  # TODO fix
 Import_study1 = False  # Phase 1 sediment
 Import_study2 = False  # UCR_2009_BeachSD
 Import_study3 = False  # UCR_2010_BeachSD
@@ -487,11 +489,17 @@ class ImportStudy(ImportTools):
         # TODO FINISH, using
         # https://www.geeksforgeeks.org/select-all-columns-except-one-given-column-in-a-pandas-dataframe/
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
-
-        self.table["locations"].groupby(self.table["locations"].columns != "principal_doc_location")['principal_doc_location']
+        print(list(self.table["locations"].columns.values))
+        group_by_cols = list(self.table["locations"].columns.values)
+        if "principal_doc_location" in group_by_cols:
+            group_by_cols.remove("principal_doc_location")
+            # TODO: change back to all group_by_cols
+            self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
+        print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
         temp_table = self.clean_numeric_cols_of_nulls(temp_table)
+        # TODO remove temp_table = temp_table.groupby([temp_table.columns != "principal_doc_location"])['principal_doc_location'].apply(', '.join).reset_index()
         return temp_table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
@@ -812,3 +820,5 @@ if __name__ == '__main__':
 # TODO: no blanks in the database
 # TODO: check for columns with same name with different info and let mae rose know
 # TODO: rename private
+# TODO: handle data duplication
+# TODO: don't need field measurements for sediment, will need for biological
