@@ -743,7 +743,7 @@ class ImportStudy(ImportTools):
             self.make_smaller_insert_statements(save_to)
         return save_to
 
-    def make_smaller_insert_statements(self, master_statement, perfile=2000):
+    def make_smaller_insert_statements(self, master_statement, perfile=1000):
         """
         Function makes smaller insert statements within text files for use in testing.
         :param master_statement: text file containing master (large) insert_statement.
