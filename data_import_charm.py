@@ -50,21 +50,22 @@ Bioed_pw = None
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
-Import_study1 = False  # Phase 1 sediment
-Import_study2 = False  # UCR_2009_BeachSD
-Import_study3 = False  # UCR_2010_BeachSD
-Import_study4 = False  # UCR_2011_BeachSD
-Import_study5 = False  # Phase 2 Sediment Teck Data
+In_pycharm = False  # TODO fix
+In_jyptr = True  # TODO fix
+Import_study1 = True  # Phase 1 sediment
+Import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+Import_study3 = True  # UCR_2010_BeachSD
+Import_study4 = True  # UCR_2011_BeachSD
+Import_study5 = True  # Phase 2 Sediment Teck Data
 Import_study6 = True  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
-Import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
+Import_study7 = True  # Phase 3 sediment  # TODO: this DID successfully insert
 Create_new_table = True
-Partial_insert = True  # TODO fix
+Partial_insert = False  # TODO fix
 
 # TODO: does Bossburg insert statements work?
 # TODO: need to check that new create statement works
 # TODO: test that all previous studies still get inserted properly
+# TODO: do insert statement check before actually inserting
 
 class NoKnownTemplate(Exception):
     """
@@ -205,7 +206,7 @@ class ImportTools:
         # TODO: booleans currently as strings: 'undetected', 'estimated',
         #        'rejected', 'greater_than', 'tic', 'reportable',
         self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
-                                 'labsample',
+                                 'labsample', 'analyte', 'full_name', 'principal_doc_location',
                                  'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
                                  'composite_type', 'taxon', 'sample_material', 'subsamp_type',
                                  'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
