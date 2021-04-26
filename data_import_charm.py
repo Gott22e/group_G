@@ -43,6 +43,8 @@ import openpyxl
 # TODO accept arguments passed from elsewhere?
 # TODO error catching when insert statements don't work (including: when field is too long for database)
 
+# TODO tell pandas to treat certain columns as strings???
+
 # Global variables:
 Tunnel = None
 Username = "anau"
@@ -52,6 +54,7 @@ Bioed_pw = None
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = False  # TODO fix
 In_jyptr = True  # TODO fix
+In_website = False
 Import_study1 = True  # Phase 1 sediment
 Import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
 Import_study3 = True  # UCR_2010_BeachSD
@@ -62,10 +65,13 @@ Import_study7 = True  # Phase 3 sediment  # TODO: this DID successfully insert
 Create_new_table = True
 Partial_insert = False  # TODO fix
 
+# TODO: currently works: study1, study4, study5, study6, study7
+
 # TODO: does Bossburg insert statements work?
 # TODO: need to check that new create statement works
 # TODO: test that all previous studies still get inserted properly
 # TODO: do insert statement check before actually inserting
+
 
 class NoKnownTemplate(Exception):
     """
@@ -272,7 +278,9 @@ class ImportTools:
         if not In_pycharm:
             # create the connection to the mysql database
             # If in juypter notebooks, ask user for password. Otherwise proceed using username "test".
-            if In_jyptr:
+            if In_website:
+                connection = pymysql.connect(user="test", password="test", db="group_G", port=4253)
+            elif In_jyptr:
                 global Bioed_pw
                 connection = pymysql.connect(db='group_G', user=Username,
                                              passwd=Bioed_pw,
@@ -525,10 +533,15 @@ class ImportStudy(ImportTools):
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
         print(list(self.table["locations"].columns.values))
         group_by_cols = list(self.table["locations"].columns.values)
+        print("Group by cols:")  # TODO remove
+        print(group_by_cols)  # TODO remove
         if "principal_doc_location" in group_by_cols:
+            # Make sure principal_doc_location is a string:
+            self.table["locations"]["principal_doc_location"] = self.table["locations"]["principal_doc_location"].astype(str)
             group_by_cols.remove("principal_doc_location")
-            self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(
-                ', '.join).reset_index()
+            # TODO: go back to group by all other columns:
+            #TODO self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
+            self.table["locations"] = self.table["locations"].groupby(["location_id"])['principal_doc_location'].apply(', '.join).reset_index()
         print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
