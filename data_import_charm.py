@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #!/usr/local/Python-3.7/bin/python
 """
 Program contains classes and functions to create data table and insert rows for the
