@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/local/Python-3.7/bin/python
 """
 Program contains classes and functions to create data table and insert rows for the
 Upper Columbia River Site database.
@@ -10,9 +11,19 @@ Updated: 2021/04/16
 
 For issues with this script, contact Allison Nau.
 """
+
+# to change permissions in linus: chmod -R 777
+
+# Booleans to specify what parts of the code to run:
+# In_pycharm used to suppress functionality that is not currently enabled:
+In_pycharm = False  # TODO fix
+In_jyptr = False  # TODO fix
+In_website = True
+
 # Import packages
-import sshtunnel
-import getpass
+if not In_website:
+    import sshtunnel
+    import getpass
 import pandas as pd
 
 # Don't truncate columns:
@@ -22,13 +33,14 @@ import pickle
 import os
 import math
 import numpy as np
-import sqlalchemy
+#TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
-import openpyxl
+#TODO import openpyxl
 
-# TODO: TEST UCR_2009_BeachSD insert statement, then try to insert through juyptr
-# TODO: may need to break up insert statements into smaller statements?
+
+# TODO: not available on bioed: sqlalchemy, openpyxl
+
 # TODO: confirm that the number of rows inserted match the dataset
 
 # TODO deal with NaN, None, Null, etc.
@@ -43,28 +55,34 @@ import openpyxl
 # TODO compare insert string between juyptr and pycharm
 # TODO test test
 # TODO accept arguments passed from elsewhere?
+# TODO error catching when insert statements don't work (including: when field is too long for database)
+
+# TODO tell pandas to treat certain columns as strings???
 
 # Global variables:
 Tunnel = None
-Username = "anau"  # TODO confirm this works
-Bioed_pw = None  # TODO confirm this works
+Username = "anau"
+Bioed_pw = None
+Table_to_use = "cr_3"  # TODO change
 
-# Booleans to specify what parts of the code to run:
-# In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
+# More booleans to specify which part of code to run
 Import_study1 = False  # Phase 1 sediment
-Import_study2 = False  # UCR_2009_BeachSD
+Import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
 Import_study3 = False  # UCR_2010_BeachSD
 Import_study4 = False  # UCR_2011_BeachSD
 Import_study5 = False  # Phase 2 Sediment Teck Data
-Import_study6 = False  # Bossburg  # TODO: need to make sure insert statments work, and this didn't break anything else
-Import_study7 = True  # Phase 3 sediment
+Import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
+Import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
 Create_new_table = True
-Partial_insert = False
+Partial_insert = False  # TODO fix
+
+# TODO: currently works: study1, study4, study5, study6, study7
 
 # TODO: does Bossburg insert statements work?
+# TODO: need to check that new create statement works
 # TODO: test that all previous studies still get inserted properly
+# TODO: do insert statement check before actually inserting
+
 
 class NoKnownTemplate(Exception):
     """
@@ -137,7 +155,6 @@ class KnownStudyTemplates:
               'alias_id', 'comments', 'river_mile', 'x_coord', 'y_coord', 'srid'],
              ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid']]
         ]
-        # TODO: implement template 2
         # TODO: generalize template 1 and 2 and 3 together
         print(f"Length of study templates: {len(self.templates)}")  # TODO remove
         # Dictionary of studies and what template to use:
@@ -174,7 +191,8 @@ class ImportTools:
         # Variables we will add in:
         self.our_added_vars = ['study_name', 'study_year', 'sample_type', 'geo_cord_system', 'utm_cord_system']
         # Table name with bioed:
-        self.table_name = "cr"
+        global Table_to_use
+        self.table_name = Table_to_use
         # Study templates:
         self.known_templates = KnownStudyTemplates()
         # Variables to have in create table statement (in addition to our added variables):
@@ -206,17 +224,16 @@ class ImportTools:
         # TODO: booleans currently as strings: 'undetected', 'estimated',
         #        'rejected', 'greater_than', 'tic', 'reportable',
         self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
-                                 'labsample',
+                                 'labsample', 'analyte', 'full_name', 'principal_doc_location',
                                  'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
-                                 'composite_type', 'taxon', 'sample_material', 'sample_description', 'subsamp_type',
+                                 'composite_type', 'taxon', 'sample_material', 'subsamp_type',
                                  'depth_units', 'material_analyzed', 'method_code', 'meas_basis', 'units', 'lab_flags',
                                  'qa_level', 'lab_conc_qual', 'validator_flags',
                                  'undetected', 'estimated',
                                  'rejected', 'greater_than', 'tic', 'reportable',
                                  'alias_id', "cas_rn", 'lab_rep',
-                                 'analyte', 'full_name', 'principal_doc_location',
-                                 'nd_rationale', 'qapp_deviation', 'nd_reported_to', 'elev_unit']
-        self.string_variables_long = ['comments']
+                                 'qapp_deviation', 'nd_reported_to', 'elev_unit']
+        self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
 
     @staticmethod
     def read_in_csv(filename, sep="|"):
@@ -238,8 +255,8 @@ class ImportTools:
         the values are a pandas dataframe representing one sheet of data.
         Will skip sheets named "SQL used" or "history".
         :param filename: excel file to read in.
-        :return: dictionary of pandas dataframes containing "filename" data/
-        # TODO: update docs
+        :param sample_type: type of sample, used to determine what excel sheets can be skipped. (e.g. "Sediment")
+        :return: dictionary of pandas dataframes containing "filename" data.
         """
         table_dict = {}
         whole = pd.ExcelFile(filename)
@@ -267,11 +284,15 @@ class ImportTools:
         Executes mySQL query "query".
         :param query: string containing mySQL query to be executed.
         """
+        # TODO: handle error catching, including when columns contain values that are too long or are the wrong type
+        # TODO: probably needs to be a return error statement?
         # If not running within pycharm:
         if not In_pycharm:
             # create the connection to the mysql database
             # If in juypter notebooks, ask user for password. Otherwise proceed using username "test".
-            if In_jyptr:
+            if In_website:
+                connection = pymysql.connect(user="test", password="test", db="group_G", port=4253)
+            elif In_jyptr:
                 global Bioed_pw
                 connection = pymysql.connect(db='group_G', user=Username,
                                              passwd=Bioed_pw,
@@ -345,6 +366,8 @@ class ImportTools:
             ImportTools.execute_query(create_statement)
         print("Create table statement:")
         print(create_statement)
+        with open("create_table.txt", "w") as my_file:
+            my_file.write(create_statement)
 
     @staticmethod
     def compare_column_names(columns, ref="column_names.txt"):
@@ -355,7 +378,7 @@ class ImportTools:
         :return: tuple of lists: (list of shared columns, list of new columns,
         list of columns missing from master database table).
         If columns are missing from the master database table, that must be resolved before data can be inserted.
-        Static method
+        Static method.
         """
         # To store reference columns:
         ref_cols = []
@@ -501,7 +524,7 @@ class ImportStudy(ImportTools):
         """
         Cleans up studies that follow template1, and combines into one dataframe.
         :return: one cleaned up pandas dataframe.
-        # TODO update documentation regarding template 2
+        # TODO update documentation regarding template 2 & 3
         """
         # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
@@ -517,21 +540,24 @@ class ImportStudy(ImportTools):
             self.table["labresult"].rename({"elevation": "elevation_dup"}, axis='columns', inplace=True)
         # Merge duplicated location information:
         # (group by everything BUT principal_doc_location
-        # TODO FINISH, using
+        # Handle partially duplicated rows using:
         # https://www.geeksforgeeks.org/select-all-columns-except-one-given-column-in-a-pandas-dataframe/
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
         print(list(self.table["locations"].columns.values))
         group_by_cols = list(self.table["locations"].columns.values)
+        print("Group by cols:")  # TODO remove
+        print(group_by_cols)  # TODO remove
         if "principal_doc_location" in group_by_cols:
+            # Make sure principal_doc_location is a string:
+            self.table["locations"]["principal_doc_location"] = self.table["locations"]["principal_doc_location"].astype(str)
             group_by_cols.remove("principal_doc_location")
-            # TODO: change back to all group_by_cols
-            self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(
-                ', '.join).reset_index()
+            # TODO: go back to group by all other columns:
+            #TODO self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
+            self.table["locations"] = self.table["locations"].groupby(["location_id"])['principal_doc_location'].apply(', '.join).reset_index()
         print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
         temp_table = self.clean_numeric_cols_of_nulls(temp_table)
-        # TODO remove temp_table = temp_table.groupby([temp_table.columns != "principal_doc_location"])['principal_doc_location'].apply(', '.join).reset_index()
         return temp_table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
@@ -583,7 +609,7 @@ class ImportStudy(ImportTools):
                 # Grab global variable:
                 global Tunnel
                 # Connect with database and execute insert statement:
-                if In_jyptr:
+                if In_jyptr or In_website:
                     if len(self.table.index) <= 5000:
                         self.execute_query(self.insert_statement)
                     else:
@@ -602,9 +628,8 @@ class ImportStudy(ImportTools):
         Compares column names of current data table with master database table.
         Save results in class attributes.
         Prints results.
-        Private method to be used by check_columns, if template hadn't been found it will store the
-        last sheet column information in tables.
-        TODO update doc
+        Private method to be used by check_columns.
+        Note: if template hadn't been found it will store the last sheet column information in tables.
         """
         print("COLUMN NAMES:")
         print(self.col_names)
@@ -620,12 +645,16 @@ class ImportStudy(ImportTools):
             self.column_types(self.table)
 
     def check_columns(self):
-        # TODO
+        """
+        Compares column names of current data table with master database table.
+        Save results in class attributes.
+        Prints results.
+        Note: if template hadn't been found it will store the last sheet column information in tables.
+        """
         if isinstance(self.table, dict):
             temp_list = []
             print(f"Combining column names for all sheets")
             for key in self.table:
-                print("You are here")  # TODO remove
                 new_columns = list(self.table[key].columns)
                 temp_list.append(new_columns)
                 print(f"For sheet '{key}', column names:")
@@ -635,7 +664,6 @@ class ImportStudy(ImportTools):
                     self.col_names.append(item)
         else:
             self.col_names = list(self.table.columns)
-        print(self.col_names)  # TODO remove
         self._check_columns()
 
     def compare_with_other_studies(self):
@@ -741,7 +769,7 @@ class ImportStudy(ImportTools):
             self.make_smaller_insert_statements(save_to)
         return save_to
 
-    def make_smaller_insert_statements(self, master_statement, perfile=500):
+    def make_smaller_insert_statements(self, master_statement, perfile=1000):
         """
         Function makes smaller insert statements within text files for use in testing.
         :param master_statement: text file containing master (large) insert_statement.
