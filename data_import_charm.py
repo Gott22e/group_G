@@ -916,3 +916,4 @@ if __name__ == '__main__':
 # TODO: handle data duplication
 # TODO: don't need field measurements for sediment, will need for biological
 # TODO: templates need to be able to handle deleted columns
+# TODO: is column_names.txt handled reasonably?
