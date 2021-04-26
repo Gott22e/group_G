@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/local/Python-3.7/bin/python
 """
 Program contains classes and functions to create data table and insert rows for the
 Upper Columbia River Site database.
@@ -10,9 +11,19 @@ Updated: 2021/04/16
 
 For issues with this script, contact Allison Nau.
 """
+
+# to change permissions in linus: chmod -R 777
+
+# Booleans to specify what parts of the code to run:
+# In_pycharm used to suppress functionality that is not currently enabled:
+In_pycharm = False  # TODO fix
+In_jyptr = False  # TODO fix
+In_website = True
+
 # Import packages
-import sshtunnel
-import getpass
+if not In_website:
+    import sshtunnel
+    import getpass
 import pandas as pd
 
 # Don't truncate columns:
@@ -22,10 +33,13 @@ import pickle
 import os
 import math
 import numpy as np
-import sqlalchemy
+#TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
-import openpyxl
+#TODO import openpyxl
+
+
+# TODO: not available on bioed: sqlalchemy, openpyxl
 
 # TODO: confirm that the number of rows inserted match the dataset
 
@@ -49,19 +63,16 @@ import openpyxl
 Tunnel = None
 Username = "anau"
 Bioed_pw = None
+Table_to_use = "cr_3"  # TODO change
 
-# Booleans to specify what parts of the code to run:
-# In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = False  # TODO fix
-In_jyptr = True  # TODO fix
-In_website = False
-Import_study1 = True  # Phase 1 sediment
-Import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-Import_study3 = True  # UCR_2010_BeachSD
-Import_study4 = True  # UCR_2011_BeachSD
-Import_study5 = True  # Phase 2 Sediment Teck Data
-Import_study6 = True  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
-Import_study7 = True  # Phase 3 sediment  # TODO: this DID successfully insert
+# More booleans to specify which part of code to run
+Import_study1 = False  # Phase 1 sediment
+Import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+Import_study3 = False  # UCR_2010_BeachSD
+Import_study4 = False  # UCR_2011_BeachSD
+Import_study5 = False  # Phase 2 Sediment Teck Data
+Import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
+Import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
 Create_new_table = True
 Partial_insert = False  # TODO fix
 
@@ -180,7 +191,8 @@ class ImportTools:
         # Variables we will add in:
         self.our_added_vars = ['study_name', 'study_year', 'sample_type', 'geo_cord_system', 'utm_cord_system']
         # Table name with bioed:
-        self.table_name = "cr"
+        global Table_to_use
+        self.table_name = Table_to_use
         # Study templates:
         self.known_templates = KnownStudyTemplates()
         # Variables to have in create table statement (in addition to our added variables):
@@ -597,7 +609,7 @@ class ImportStudy(ImportTools):
                 # Grab global variable:
                 global Tunnel
                 # Connect with database and execute insert statement:
-                if In_jyptr:
+                if In_jyptr or In_website:
                     if len(self.table.index) <= 5000:
                         self.execute_query(self.insert_statement)
                     else:
