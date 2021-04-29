@@ -16,8 +16,8 @@ For issues with this script, contact Allison Nau.
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = False  # TODO fix
-In_jyptr = False  # TODO fix
-In_website = True
+In_jyptr = True  # TODO fix
+In_website = False
 
 Partial_insert = False  # TODO fix
 
@@ -72,8 +72,8 @@ Bioed_pw = None
 Table_to_use = "cr_3"  # TODO change
 
 
-
 # TODO fix alignment for certain studies
+# TODO: add column names in
 
 class NoKnownTemplate(Exception):
     """
@@ -227,11 +227,11 @@ class ImportTools:
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
 
     @staticmethod
-    def read_in_csv(filename, sep="|"):
+    def read_in_csv(filename, sep=","):
         """
         Reads in csv "filename" as a pandas dataframe.
         :param filename: string containing file name of the csv file to be imported.
-        :param sep: character that separate fields within the csv, default "|"
+        :param sep: character that separate fields within the csv, default ","
         :return: pandas dataframe containing data within filename.
         Static method.
         """
@@ -262,6 +262,24 @@ class ImportTools:
                     table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
                 else:
                     print("File name extension is not recognized")
+            else:
+                print(f"Skipping sheet: {sheet}")
+        # Drop duplicate rows:  # TODO Does this work well enough?
+        for sheet in table_dict:
+            table_dict[sheet].drop_duplicates(inplace=True)
+        return table_dict
+
+    @staticmethod
+    def read_in_dict_strings(my_dict, sample_type):
+        # TODO
+        table_dict = {}
+        sheets = my_dict.keys()
+        for sheet in sheets:
+            if sheet != "SQL used" and sheet != "history" and \
+                    not (sheet == "field measurements" and sample_type == "Sediment"):
+                print(f"Reading in sheet: {sheet}")
+                my_string = StringIO(my_dict[sheet])
+                table_dict[sheet] = pd.read_csv(my_string)
             else:
                 print(f"Skipping sheet: {sheet}")
         # Drop duplicate rows:  # TODO Does this work well enough?
@@ -419,11 +437,12 @@ class ImportStudy(ImportTools):
     Inherits from ImportTools.
     """
 
-    def __init__(self, the_file, study_name, study_year, sample_type, geo_cord_system, utm_cord_system,
-                 is_csv=True, special_header=False):
+    def __init__(self, the_input, study_name, study_year, sample_type, geo_cord_system, utm_cord_system,
+                 is_csv=False, is_excel=False, is_dict_strings=False, is_dict_filenames=False, special_header=False,
+                 sep=","):
         """
         Initializes one ImportStudy object.
-        :param the_file: csv or excel file containing study data.
+        :param the_input: csv or excel file containing study data.
         :param study_name: string containing name to be given to the study within the database.
         :param study_year: integer representing study year.
         :param sample_type: string containing study type.
@@ -433,12 +452,21 @@ class ImportStudy(ImportTools):
         :param special_header: boolean specifying if there is formatting in header of excel file that
         must be adhered to.
         TODO deal with is_csv
+        TODO: add parameters to doc string
         """
         # Initialize variables from parent:
         super().__init__()
         # Initialize variables:
-        self.the_file = the_file
+        self.the_input = the_input
         self.is_csv = is_csv
+        self.is_excel = is_excel
+        if not In_website:
+            self.is_dict_strings = is_dict_strings
+        else:
+            self.is_dict_strings = True
+        # TODO: catch if all are False input types
+        self.is_dict_filenames = is_dict_filenames
+        self.sep = sep
         self.study_name = study_name
         self.study_year = study_year
         self.sample_type = sample_type
@@ -456,12 +484,12 @@ class ImportStudy(ImportTools):
         self.found_template = False
         # Read in study (self.table will be a pandas dataframe if is_csv is True, otherwise will be
         # a list of pandas dataframes:
-        self.table = self.read_in_study(filename=self.the_file)
+        self.table = self.read_in_study(filename=self.the_input)
         # Compare column headers with other studies to see what templates make sense:
         self.compare_with_other_studies()
         if self.found_template:  # If template was found, proceed
             # If study was an excel file, combine into one table, according to template in self.use_template
-            if not self.is_csv:
+            if not isinstance(self.table, pd.DataFrame):  # TODO working properly?
                 self.combine_sheets()
             # If template was found, go ahead and add columns with the study info:
             if self.use_template is not None:
@@ -472,24 +500,41 @@ class ImportStudy(ImportTools):
     def read_in_study(self, filename):
         """
         Read in data stored in "filename".
-        :param filename: excel or csv file containing data.
+        :param filename: excel or csv file containing data or dictionary of strings or dictionary of filenames.
         :return: dataframe (csv) or list of dataframes (excel) containing study data.
+        # TODO edit doc
         """
         if self.is_csv:  # TODO: Template 0?
-            table = ImportTools.read_in_csv(filename)
+            table = ImportTools.read_in_csv(filename, sep=self.sep)
             table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
             self.col_names_by_sheet["sheet1"] = table.columns
-        else:
+        elif self.is_excel:
             table = ImportTools.read_in_excel(filename, self.sample_type)
             for t in table:
                 table[t].columns = self.clean_col_names(table[t])
                 self.col_names_by_sheet[t] = table[t].columns
+        elif self.is_dict_strings:
+            # TODO
+            table = ImportTools.read_in_dict_strings(filename, self.sample_type)
+            for t in table:
+                table[t].columns = self.clean_col_names(table[t])
+                self.col_names_by_sheet[t] = table[t].columns
+            # If dictionary is only one entry:
+            if len(table) == 1:
+                for t in table:
+                    table = table[t]
+        elif self.is_dict_filenames:
+            # TODO
+            pass
+        else:
+            print("Must specify input type (is_csv, is_excel, is_dict_strings, is_dict_filenames")
         return table
 
     def combine_sheets(self):
         """
         Combines sheets that were stored in study's excel data file, according to template.
         This should not be used if template is unknown.
+        TODO: update doc
         """
         template = self.use_template
         temp_table = None
@@ -873,67 +918,95 @@ def main():
     # Tunnel = None
     if import_study1:
         print("Importing study 1 (Phase 1 Sediment):")
-        study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
+        study1 = ImportStudy(the_input="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
+                             geo_cord_system="unknown_A1", utm_cord_system="unknown_A2", sep="|", is_csv=True)
         study1.run_import()
     if import_study2:
         print("Importing study 2 (UCR_2009_BeachSD):")
-        study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
+        study2 = ImportStudy(the_input="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
+                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_excel=True)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
     if import_study3:
         print("Importing study 3 (UCR_2010_BeachSD):")
-        study3 = ImportStudy(the_file="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
+        study3 = ImportStudy(the_input="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_csv=False)
+                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_excel=True)
         study3.run_import()
     if import_study4:
         print("Importing study 4 (UCR_2011_BeachSD):")
-        study4 = ImportStudy(the_file="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
+        study4 = ImportStudy(the_input="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_csv=False)
+                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_excel=True)
         study4.run_import()
     if import_study5:
         print("Importing study 5 (Phase 2 Sediment Teck Data):")
-        study5 = ImportStudy(the_file="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
+        study5 = ImportStudy(the_input="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
                              study_year=2013,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_csv=False)
+                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_excel=True)
         study5.run_import()
     if import_study6:
         print("Importing study 6 (Bossburg Data):")
-        study6 = ImportStudy(the_file="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
+        study6 = ImportStudy(the_input="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_csv=False)
+                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_excel=True)
         study6.run_import()
     if import_study7:
         print("Importing study 7 (Phase 3 Sediment):")
-        study7 = ImportStudy(the_file="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
+        study7 = ImportStudy(the_input="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_csv=False)
+                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_excel=True)
         study7.run_import()
     if In_jyptr:
         Tunnel.stop()
 
 def test_code():
     # TODO
+    # Grab global variable:
+    global Tunnel
+    global Bioed_pw
+    # Set up sshtunnel (for juyptr notebook):
+    our_import = ImportTools()
+    if In_jyptr:
+        # connect to bioed via an ssh tunnel
+        # do NOT include your password, use getpass
+        Tunnel = sshtunnel.SSHTunnelForwarder(
+            ('bioed.bu.edu', 22),
+            ssh_username=Username,
+            ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
+            remote_bind_address=('localhost', 4253))
+        # the password requested here is your kerberos password that you use to access bioed
+        # "activate" the ssh tunnel
+        Tunnel.start()
+        # Get the bioed password (once):
+        Bioed_pw = getpass.getpass(prompt='Password (bioed): ', stream=None)
+    # Testing string dicts:
     im_a_csv = "Phase 1 Sediment.csv"
     im_a_dict_of_files = {"lab_results": "phase3_labresults.csv", "locations": "phase3_location.csv"}
+    dict_of_strings = {}
     with open("phase3_labresults.txt", "r", encoding='utf-8-sig') as my_file:
         my_string = my_file.read()
+    dict_of_strings["labresults"] = my_string
     with open("phase3_location.txt", "r", encoding='utf-8-sig') as my_file:
         my_string = my_file.read()
-    my_string = StringIO(my_string)
-    my_df = pd.read_csv(my_string)
-    print(my_df)
-    pass
-
+    # TODO: drop down selecting labresults or locations
+    dict_of_strings["locations"] = my_string
+    #TODO remove my_string = StringIO(my_string)
+    #TODO remove my_df = pd.read_csv(my_string)
+    # TODO remove print(my_df)
+    string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import2", study_year=9999,
+                               sample_type="Sediment", geo_cord_system="Nonsense1", utm_cord_system="Nonsense3",
+                               is_dict_strings=True)
+    string_study.run_import()
+    # TODO test with only one sheet
+    if In_jyptr:
+        Tunnel.stop()
 
 if __name__ == '__main__':
-    main()
+    #TODO put back main()
     test_code()
 
 # TODO indexes
