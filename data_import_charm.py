@@ -19,11 +19,14 @@ In_pycharm = False  # TODO fix
 In_jyptr = False  # TODO fix
 In_website = True
 
+Partial_insert = False  # TODO fix
+
 # Import packages
 if not In_website:
     import sshtunnel
     import getpass
 import pandas as pd
+#TODO import detect_delimiter
 
 # Don't truncate columns:
 pd.set_option('display.max_columns', None)
@@ -32,11 +35,14 @@ import pickle
 import os
 import math
 import numpy as np
+from io import StringIO
 #TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
 #TODO import openpyxl
 
+
+# TODO: take out all read/write text files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 # TODO: not available on bioed: sqlalchemy, openpyxl
 
@@ -57,6 +63,7 @@ import xlrd
 # TODO error catching when insert statements don't work (including: when field is too long for database)
 
 # TODO tell pandas to treat certain columns as strings???
+# TODO move booleans to more logical place
 
 # Global variables:
 Tunnel = None
@@ -64,24 +71,9 @@ Username = "anau"
 Bioed_pw = None
 Table_to_use = "cr_3"  # TODO change
 
-# More booleans to specify which part of code to run
-Import_study1 = False  # Phase 1 sediment
-Import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-Import_study3 = False  # UCR_2010_BeachSD
-Import_study4 = False  # UCR_2011_BeachSD
-Import_study5 = False  # Phase 2 Sediment Teck Data
-Import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
-Import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
-Create_new_table = True
-Partial_insert = False  # TODO fix
 
-# TODO: currently works: study1, study4, study5, study6, study7
 
-# TODO: does Bossburg insert statements work?
-# TODO: need to check that new create statement works
-# TODO: test that all previous studies still get inserted properly
-# TODO: do insert statement check before actually inserting
-
+# TODO fix alignment for certain studies
 
 class NoKnownTemplate(Exception):
     """
@@ -440,6 +432,7 @@ class ImportStudy(ImportTools):
         :param is_csv: boolean specifying if input file is a csv (True, default) or an excel file.
         :param special_header: boolean specifying if there is formatting in header of excel file that
         must be adhered to.
+        TODO deal with is_csv
         """
         # Initialize variables from parent:
         super().__init__()
@@ -618,7 +611,8 @@ class ImportStudy(ImportTools):
                             self.execute_query(query=query)
             # TODO: modify to raise error?
             # Save current known templates:
-            pickle.dump(self.known_templates, open("saved_templates", "wb"))
+            if not In_website:
+                pickle.dump(self.known_templates, open("saved_templates", "wb"))
         else:
             print("Cannot import study if template is unknown")
 
@@ -762,10 +756,11 @@ class ImportStudy(ImportTools):
         self.insert_statement = insert_string
         # Save insert statement to file:
         # TODO: Does this append or overwrite in juyptr?
-        with open(save_to, "w") as my_file:
-            my_file.write(self.insert_statement)
-        if Partial_insert:
-            self.make_smaller_insert_statements(save_to)
+        if not In_website:
+            with open(save_to, "w") as my_file:
+                my_file.write(self.insert_statement)
+            if Partial_insert:
+                self.make_smaller_insert_statements(save_to)
         return save_to
 
     def make_smaller_insert_statements(self, master_statement, perfile=1000):
@@ -802,9 +797,10 @@ class ImportStudy(ImportTools):
                 temp = temp[:-1] + ";"
             # Save smaller insert statement:
             statements.append(temp)
-            filename = f"{self.study_name}_temp_insert_partial_{f}"
-            with open(filename, "w") as my_file2:
-                my_file2.write(temp)
+            if not In_website:
+                filename = f"{self.study_name}_temp_insert_partial_{f}"
+                with open(filename, "w") as my_file2:
+                    my_file2.write(temp)
         return statements
         # TODO: make sure not missing last line
 
@@ -826,11 +822,32 @@ class ImportStudy(ImportTools):
         return build_str
 
 
+def what_is_this(input):
+    # TODO put this back in class
+    pass
+
 # main function:
 def main():
     """
     Main function to run to run entire program.
     """
+    # More booleans to specify which part of code to run
+    import_study1 = False  # Phase 1 sediment
+    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = False  # UCR_2010_BeachSD
+    import_study4 = False  # UCR_2011_BeachSD
+    import_study5 = False  # Phase 2 Sediment Teck Data
+    import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
+    import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
+    create_new_table = False  # Cannot be used when it website
+
+
+    # TODO: currently works: study1, study4, study5, study6, study7
+
+    # TODO: does Bossburg insert statements work?
+    # TODO: need to check that new create statement works
+    # TODO: test that all previous studies still get inserted properly
+    # TODO: do insert statement check before actually inserting
     # Grab global variable:
     global Tunnel
     global Bioed_pw
@@ -850,49 +867,49 @@ def main():
         # Get the bioed password (once):
         Bioed_pw = getpass.getpass(prompt='Password (bioed): ', stream=None)
     # Create table:
-    if Create_new_table:
+    if create_new_table and not In_website:
         our_import.create_table()
     # Import study1:
     # Tunnel = None
-    if Import_study1:
+    if import_study1:
         print("Importing study 1 (Phase 1 Sediment):")
         study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
                              geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
         study1.run_import()
-    if Import_study2:
+    if import_study2:
         print("Importing study 2 (UCR_2009_BeachSD):")
         study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
                              geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
-    if Import_study3:
+    if import_study3:
         print("Importing study 3 (UCR_2010_BeachSD):")
         study3 = ImportStudy(the_file="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
                              sample_type="Sediment",
                              geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_csv=False)
         study3.run_import()
-    if Import_study4:
+    if import_study4:
         print("Importing study 4 (UCR_2011_BeachSD):")
         study4 = ImportStudy(the_file="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
                              sample_type="Sediment",
                              geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_csv=False)
         study4.run_import()
-    if Import_study5:
+    if import_study5:
         print("Importing study 5 (Phase 2 Sediment Teck Data):")
         study5 = ImportStudy(the_file="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
                              study_year=2013,
                              sample_type="Sediment",
                              geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_csv=False)
         study5.run_import()
-    if Import_study6:
+    if import_study6:
         print("Importing study 6 (Bossburg Data):")
         study6 = ImportStudy(the_file="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
                              sample_type="Sediment",
                              geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_csv=False)
         study6.run_import()
-    if Import_study7:
+    if import_study7:
         print("Importing study 7 (Phase 3 Sediment):")
         study7 = ImportStudy(the_file="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
                              sample_type="Sediment",
@@ -901,9 +918,23 @@ def main():
     if In_jyptr:
         Tunnel.stop()
 
+def test_code():
+    # TODO
+    im_a_csv = "Phase 1 Sediment.csv"
+    im_a_dict_of_files = {"lab_results": "phase3_labresults.csv", "locations": "phase3_location.csv"}
+    with open("phase3_labresults.txt", "r", encoding='utf-8-sig') as my_file:
+        my_string = my_file.read()
+    with open("phase3_location.txt", "r", encoding='utf-8-sig') as my_file:
+        my_string = my_file.read()
+    my_string = StringIO(my_string)
+    my_df = pd.read_csv(my_string)
+    print(my_df)
+    pass
+
 
 if __name__ == '__main__':
     main()
+    test_code()
 
 # TODO indexes
 
