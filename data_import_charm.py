@@ -6,7 +6,7 @@ Upper Columbia River Site database.
 Program is designed to be run from within the juyptr notebook "data_import.ipynb".
 (This is required for password management and tunneling.)
 
-Updated: 2021/04/16
+Updated: 2021/04/30
 
 For issues with this script, contact Allison Nau.
 """
@@ -16,10 +16,10 @@ For issues with this script, contact Allison Nau.
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
 In_pycharm = False  # TODO fix
-In_jyptr = True  # TODO fix
-In_website = False
+In_jyptr = False  # TODO fix
+In_website = True
 
-Partial_insert = False  # TODO fix
+Partial_insert = True  # TODO fix
 
 # Import packages
 if not In_website:
@@ -42,10 +42,6 @@ import xlrd
 #TODO import openpyxl
 
 
-# TODO: take out all read/write text files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# TODO: not available on bioed: sqlalchemy, openpyxl
-
 # TODO: confirm that the number of rows inserted match the dataset
 
 # TODO deal with NaN, None, Null, etc.
@@ -58,12 +54,8 @@ import xlrd
 
 # TODO row count to make sure everything is there
 # TODO compare insert string between juyptr and pycharm
-# TODO test test
-# TODO accept arguments passed from elsewhere?
 # TODO error catching when insert statements don't work (including: when field is too long for database)
 
-# TODO tell pandas to treat certain columns as strings???
-# TODO move booleans to more logical place
 
 # Global variables:
 Tunnel = None
@@ -174,6 +166,21 @@ class ImportTools:
     """
     Class contains tools for importing data tables into database.
     """
+    # Variables to have in create table statement (in addition to our added variables):
+    full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
+                      'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                      'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                      'composite_type', 'taxon', 'sample_material', 'sample_description',
+                      'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                      'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                      'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                      'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                      'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                      'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
+                      'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
+                      'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                      'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                      'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
 
     def __init__(self):
         """
@@ -186,21 +193,6 @@ class ImportTools:
         self.table_name = Table_to_use
         # Study templates:
         self.known_templates = KnownStudyTemplates()
-        # Variables to have in create table statement (in addition to our added variables):
-        self.full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
-                          'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                          'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                          'composite_type', 'taxon', 'sample_material', 'sample_description',
-                          'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                          'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                          'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                          'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                          'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                          'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
-                          'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
-                          'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
-                          'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
-                          'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
         # Variable types:
         self.int_variables = ['sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
@@ -235,7 +227,23 @@ class ImportTools:
         :return: pandas dataframe containing data within filename.
         Static method.
         """
-        temp_table = pd.read_csv(filename, sep=sep, header=1)
+        # Is first row column names or second row?
+        # TODO: test on original csv
+        temp_table_v1 = pd.read_csv(filename, sep=sep, header=1)
+        header_v1 = set(temp_table_v1.columns)
+        intersection_v1 = header_v1.intersection(ImportTools.full_list)
+        print(intersection_v1)
+        temp_table_v2 = pd.read_csv(filename, sep=sep, header=0)
+        header_v2 = set(temp_table_v2.columns)
+        intersection_v2 = header_v2.intersection(ImportTools.full_list)
+        print(intersection_v2)
+        if len(intersection_v1) > 1:
+            temp_table = temp_table_v1
+        elif len(intersection_v2) > 1:
+            temp_table = temp_table_v2
+        else:
+            print("Can't identify row column names are in")
+            temp_table = None
         temp_table.drop_duplicates(inplace=True)  # TODO: does this work properly?
         return temp_table
 
@@ -270,8 +278,38 @@ class ImportTools:
         return table_dict
 
     @staticmethod
+    def read_in_dict_csvs(my_dict, sample_type, sep=","):
+        """
+        Reads in a dictionary of csv filenames, created a dictionary of pandas dataframes.
+        :param my_dict: dictionary where the values are csv filenames, and the key represent the sheet it came from in
+        the excel file.
+        :param sample_type: string representing sample type. Should be in: ["Sediment"]
+        :param sep: delimiter used in csv file. Default "," .
+        :return: dictionary of pandas dataframes.
+        """
+        # TODO: make sample_type enum?
+        table_dict = {}
+        for sheet, filename in my_dict.items():
+            if sheet != "SQL used" and sheet != "history" and \
+                    not (sheet == "field measurements" and sample_type == "Sediment"):
+                print(f"Reading in sheet: {sheet}")
+                table_dict[sheet] = ImportTools.read_in_csv(filename, sep=sep)
+            else:
+                print(f"Skipping sheet: {sheet}")
+        # Drop duplicate rows:  # TODO Does this work well enough?
+        for sheet in table_dict:
+            table_dict[sheet].drop_duplicates(inplace=True)
+        return table_dict
+
+    @staticmethod
     def read_in_dict_strings(my_dict, sample_type):
-        # TODO
+        """
+        Reads in a dictionary of strings representing csv files, created a dictionary of pandas dataframes.
+        :param my_dict: dictionary where the values are strings representing csv files, and the key represent the
+        sheet it came from in the excel file.
+        :param sample_type: string representing sample type. Should be in: ["Sediment"].
+        :return: dictionary of pandas dataframes.
+        """
         table_dict = {}
         sheets = my_dict.keys()
         for sheet in sheets:
@@ -336,10 +374,10 @@ class ImportTools:
         with open("column_names.txt", 'w') as my_file:
             for temp in self.our_added_vars:
                 my_file.write(f"{temp}\n")
-            for temp in self.full_list:
+            for temp in ImportTools.full_list:
                 my_file.write(f"{temp}\n")
         # Loop for variables to add (done this way to preserve order)
-        for temp in self.full_list:
+        for temp in ImportTools.full_list:
             create_string += f"{temp} "
             if temp in self.string_variables:
                 create_string += "VARCHAR(100)"
@@ -448,11 +486,13 @@ class ImportStudy(ImportTools):
         :param sample_type: string containing study type.
         :param geo_cord_system: string specifying coordinate system used in x & y coordinate columns.
         :param utm_cord_system: string specifying coordinate system used in x & y utm coordinate columns.
-        :param is_csv: boolean specifying if input file is a csv (True, default) or an excel file.
+        :param is_csv: boolean specifying if input file is a csv.
+        :param is_excel: boolean specifying if input file is an Excel workbook.
+        :param is_dict_strings: boolean specifying if input file is a dictionary of strings representing csv files.
+        :param is_dict_filenames: boolean specifying if input file is a dictionary of csv filenames.
         :param special_header: boolean specifying if there is formatting in header of excel file that
         must be adhered to.
         TODO deal with is_csv
-        TODO: add parameters to doc string
         """
         # Initialize variables from parent:
         super().__init__()
@@ -504,17 +544,19 @@ class ImportStudy(ImportTools):
         :return: dataframe (csv) or list of dataframes (excel) containing study data.
         # TODO edit doc
         """
+        # If input in a csv:
         if self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename, sep=self.sep)
             table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
             self.col_names_by_sheet["sheet1"] = table.columns
+        # If input is an excel file:
         elif self.is_excel:
             table = ImportTools.read_in_excel(filename, self.sample_type)
             for t in table:
                 table[t].columns = self.clean_col_names(table[t])
                 self.col_names_by_sheet[t] = table[t].columns
+        # If input is a dictionary of strings:
         elif self.is_dict_strings:
-            # TODO
             table = ImportTools.read_in_dict_strings(filename, self.sample_type)
             for t in table:
                 table[t].columns = self.clean_col_names(table[t])
@@ -523,9 +565,16 @@ class ImportStudy(ImportTools):
             if len(table) == 1:
                 for t in table:
                     table = table[t]
+        # If input is a dictionary of csv filenames:
         elif self.is_dict_filenames:
-            # TODO
-            pass
+            table = ImportTools.read_in_dict_csvs(filename, self.sample_type, sep=self.sep)
+            for t in table:
+                table[t].columns = self.clean_col_names(table[t])
+                self.col_names_by_sheet[t] = table[t].columns
+            # If dictionary is only one entry:
+            if len(table) == 1:
+                for t in table:
+                    table = table[t]
         else:
             print("Must specify input type (is_csv, is_excel, is_dict_strings, is_dict_filenames")
         return table
@@ -534,7 +583,6 @@ class ImportStudy(ImportTools):
         """
         Combines sheets that were stored in study's excel data file, according to template.
         This should not be used if template is unknown.
-        TODO: update doc
         """
         template = self.use_template
         temp_table = None
@@ -570,6 +618,8 @@ class ImportStudy(ImportTools):
             self.table["labresult"] = self.table.pop("labresults")
         if "lab results" in self.table:
             self.table["labresult"] = self.table.pop("lab results")
+        if "lab_results" in self.table:
+            self.table["labresult"] = self.table.pop("lab_results")
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
@@ -582,8 +632,6 @@ class ImportStudy(ImportTools):
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
         print(list(self.table["locations"].columns.values))
         group_by_cols = list(self.table["locations"].columns.values)
-        print("Group by cols:")  # TODO remove
-        print(group_by_cols)  # TODO remove
         if "principal_doc_location" in group_by_cols:
             # Make sure principal_doc_location is a string:
             self.table["locations"]["principal_doc_location"] = self.table["locations"]["principal_doc_location"].astype(str)
@@ -814,14 +862,17 @@ class ImportStudy(ImportTools):
         :param master_statement: text file containing master (large) insert_statement.
         :param perfile: number of rows to include per smaller text file.
         :return: list of smaller insert statements
+        # TODO update
         """
         lines = []
         statements = []
-        # Read in master inser statement file:
-        with open(master_statement, "r") as my_file:
-            header = my_file.readline()
-            for line in my_file:
-                lines.append(line)
+        # Pull out header from master statement:
+        #TODO with open(master_statement, "r") as my_file:
+        #TODO     header = my_file.readline()
+        #TODO     for line in my_file:
+        #TODO         lines.append(line)
+        header, master_statement = self.insert_statement.split("\n", maxsplit=1)
+        lines = master_statement.split("\n")
         # Number of rows to insert:
         rows = len(lines)
         files_to_make = math.ceil(rows / perfile)
@@ -871,6 +922,7 @@ def what_is_this(input):
     # TODO put this back in class
     pass
 
+
 # main function:
 def main():
     """
@@ -885,7 +937,6 @@ def main():
     import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
     import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
     create_new_table = False  # Cannot be used when it website
-
 
     # TODO: currently works: study1, study4, study5, study6, study7
 
@@ -964,7 +1015,9 @@ def main():
         Tunnel.stop()
 
 def test_code():
-    # TODO
+    """
+    Test code for testing if implementation of dictionary of strings and dictionary of CSV works.
+    """
     # Grab global variable:
     global Tunnel
     global Bioed_pw
@@ -992,22 +1045,30 @@ def test_code():
     dict_of_strings["labresults"] = my_string
     with open("phase3_location.txt", "r", encoding='utf-8-sig') as my_file:
         my_string = my_file.read()
-    # TODO: drop down selecting labresults or locations
+    # TODO: drop down selecting labresult or locations
     dict_of_strings["locations"] = my_string
-    #TODO remove my_string = StringIO(my_string)
-    #TODO remove my_df = pd.read_csv(my_string)
-    # TODO remove print(my_df)
-    string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import2", study_year=9999,
+    string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import4", study_year=9999,
                                sample_type="Sediment", geo_cord_system="Nonsense1", utm_cord_system="Nonsense3",
                                is_dict_strings=True)
     string_study.run_import()
-    # TODO test with only one sheet
+    # Testing dict of CSV files:
+    dict_of_csvs = {"lab_results": "phase3_labresults.csv", "locations": "phase3_location.csv"}
+    csv_study = ImportStudy(the_input=dict_of_csvs, study_name="CSV Import4", study_year=9999, sample_type="Sediment",
+                            geo_cord_system="Nonsense1", utm_cord_system="Nonsense2", is_dict_filenames=True)
+    csv_study.run_import()
+    # Re-test wacky csv:
+    study1 = ImportStudy(the_input="Phase 1 Sediment.csv", study_name="WackyCSV4", study_year=9999,
+                         sample_type="Sediment",
+                         geo_cord_system="unknown_A1", utm_cord_system="unknown_A2", sep="|", is_csv=True)
+    study1.run_import()
     if In_jyptr:
         Tunnel.stop()
 
+
 if __name__ == '__main__':
-    #TODO put back main()
+    main()
     test_code()
+
 
 # TODO indexes
 
