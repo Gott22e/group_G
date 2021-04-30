@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #!/usr/local/Python-3.7/bin/python
 """
 Program contains classes and functions to create data table and insert rows for the
@@ -7,7 +6,7 @@ Upper Columbia River Site database.
 Program is designed to be run from within the juyptr notebook "data_import.ipynb".
 (This is required for password management and tunneling.)
 
-Updated: 2021/04/16
+Updated: 2021/04/30
 
 For issues with this script, contact Allison Nau.
 """
@@ -20,11 +19,14 @@ In_pycharm = False  # TODO fix
 In_jyptr = False  # TODO fix
 In_website = True
 
+Partial_insert = True  # TODO fix
+
 # Import packages
 if not In_website:
     import sshtunnel
     import getpass
 import pandas as pd
+#TODO import detect_delimiter
 
 # Don't truncate columns:
 pd.set_option('display.max_columns', None)
@@ -33,13 +35,12 @@ import pickle
 import os
 import math
 import numpy as np
+from io import StringIO
 #TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
 #TODO import openpyxl
 
-
-# TODO: not available on bioed: sqlalchemy, openpyxl
 
 # TODO: confirm that the number of rows inserted match the dataset
 
@@ -53,11 +54,8 @@ import xlrd
 
 # TODO row count to make sure everything is there
 # TODO compare insert string between juyptr and pycharm
-# TODO test test
-# TODO accept arguments passed from elsewhere?
 # TODO error catching when insert statements don't work (including: when field is too long for database)
 
-# TODO tell pandas to treat certain columns as strings???
 
 # Global variables:
 Tunnel = None
@@ -65,24 +63,9 @@ Username = "anau"
 Bioed_pw = None
 Table_to_use = "cr_3"  # TODO change
 
-# More booleans to specify which part of code to run
-Import_study1 = False  # Phase 1 sediment
-Import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-Import_study3 = False  # UCR_2010_BeachSD
-Import_study4 = False  # UCR_2011_BeachSD
-Import_study5 = False  # Phase 2 Sediment Teck Data
-Import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
-Import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
-Create_new_table = True
-Partial_insert = False  # TODO fix
 
-# TODO: currently works: study1, study4, study5, study6, study7
-
-# TODO: does Bossburg insert statements work?
-# TODO: need to check that new create statement works
-# TODO: test that all previous studies still get inserted properly
-# TODO: do insert statement check before actually inserting
-
+# TODO fix alignment for certain studies
+# TODO: add column names in
 
 class NoKnownTemplate(Exception):
     """
@@ -183,6 +166,21 @@ class ImportTools:
     """
     Class contains tools for importing data tables into database.
     """
+    # Variables to have in create table statement (in addition to our added variables):
+    full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
+                      'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                      'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                      'composite_type', 'taxon', 'sample_material', 'sample_description',
+                      'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                      'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                      'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                      'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                      'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                      'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
+                      'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
+                      'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                      'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                      'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
 
     def __init__(self):
         """
@@ -195,21 +193,6 @@ class ImportTools:
         self.table_name = Table_to_use
         # Study templates:
         self.known_templates = KnownStudyTemplates()
-        # Variables to have in create table statement (in addition to our added variables):
-        self.full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
-                          'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                          'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                          'composite_type', 'taxon', 'sample_material', 'sample_description',
-                          'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                          'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                          'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                          'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                          'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                          'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
-                          'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
-                          'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
-                          'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
-                          'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
         # Variable types:
         self.int_variables = ['sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
@@ -236,15 +219,31 @@ class ImportTools:
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
 
     @staticmethod
-    def read_in_csv(filename, sep="|"):
+    def read_in_csv(filename, sep=","):
         """
         Reads in csv "filename" as a pandas dataframe.
         :param filename: string containing file name of the csv file to be imported.
-        :param sep: character that separate fields within the csv, default "|"
+        :param sep: character that separate fields within the csv, default ","
         :return: pandas dataframe containing data within filename.
         Static method.
         """
-        temp_table = pd.read_csv(filename, sep=sep, header=1)
+        # Is first row column names or second row?
+        # TODO: test on original csv
+        temp_table_v1 = pd.read_csv(filename, sep=sep, header=1)
+        header_v1 = set(temp_table_v1.columns)
+        intersection_v1 = header_v1.intersection(ImportTools.full_list)
+        print(intersection_v1)
+        temp_table_v2 = pd.read_csv(filename, sep=sep, header=0)
+        header_v2 = set(temp_table_v2.columns)
+        intersection_v2 = header_v2.intersection(ImportTools.full_list)
+        print(intersection_v2)
+        if len(intersection_v1) > 1:
+            temp_table = temp_table_v1
+        elif len(intersection_v2) > 1:
+            temp_table = temp_table_v2
+        else:
+            print("Can't identify row column names are in")
+            temp_table = None
         temp_table.drop_duplicates(inplace=True)  # TODO: does this work properly?
         return temp_table
 
@@ -271,6 +270,54 @@ class ImportTools:
                     table_dict[sheet] = pd.read_excel(filename, sheet_name=sheet)
                 else:
                     print("File name extension is not recognized")
+            else:
+                print(f"Skipping sheet: {sheet}")
+        # Drop duplicate rows:  # TODO Does this work well enough?
+        for sheet in table_dict:
+            table_dict[sheet].drop_duplicates(inplace=True)
+        return table_dict
+
+    @staticmethod
+    def read_in_dict_csvs(my_dict, sample_type, sep=","):
+        """
+        Reads in a dictionary of csv filenames, created a dictionary of pandas dataframes.
+        :param my_dict: dictionary where the values are csv filenames, and the key represent the sheet it came from in
+        the excel file.
+        :param sample_type: string representing sample type. Should be in: ["Sediment"]
+        :param sep: delimiter used in csv file. Default "," .
+        :return: dictionary of pandas dataframes.
+        """
+        # TODO: make sample_type enum?
+        table_dict = {}
+        for sheet, filename in my_dict.items():
+            if sheet != "SQL used" and sheet != "history" and \
+                    not (sheet == "field measurements" and sample_type == "Sediment"):
+                print(f"Reading in sheet: {sheet}")
+                table_dict[sheet] = ImportTools.read_in_csv(filename, sep=sep)
+            else:
+                print(f"Skipping sheet: {sheet}")
+        # Drop duplicate rows:  # TODO Does this work well enough?
+        for sheet in table_dict:
+            table_dict[sheet].drop_duplicates(inplace=True)
+        return table_dict
+
+    @staticmethod
+    def read_in_dict_strings(my_dict, sample_type):
+        """
+        Reads in a dictionary of strings representing csv files, created a dictionary of pandas dataframes.
+        :param my_dict: dictionary where the values are strings representing csv files, and the key represent the
+        sheet it came from in the excel file.
+        :param sample_type: string representing sample type. Should be in: ["Sediment"].
+        :return: dictionary of pandas dataframes.
+        """
+        table_dict = {}
+        sheets = my_dict.keys()
+        for sheet in sheets:
+            if sheet != "SQL used" and sheet != "history" and \
+                    not (sheet == "field measurements" and sample_type == "Sediment"):
+                print(f"Reading in sheet: {sheet}")
+                my_string = StringIO(my_dict[sheet])
+                table_dict[sheet] = pd.read_csv(my_string)
             else:
                 print(f"Skipping sheet: {sheet}")
         # Drop duplicate rows:  # TODO Does this work well enough?
@@ -327,10 +374,10 @@ class ImportTools:
         with open("column_names.txt", 'w') as my_file:
             for temp in self.our_added_vars:
                 my_file.write(f"{temp}\n")
-            for temp in self.full_list:
+            for temp in ImportTools.full_list:
                 my_file.write(f"{temp}\n")
         # Loop for variables to add (done this way to preserve order)
-        for temp in self.full_list:
+        for temp in ImportTools.full_list:
             create_string += f"{temp} "
             if temp in self.string_variables:
                 create_string += "VARCHAR(100)"
@@ -428,25 +475,38 @@ class ImportStudy(ImportTools):
     Inherits from ImportTools.
     """
 
-    def __init__(self, the_file, study_name, study_year, sample_type, geo_cord_system, utm_cord_system,
-                 is_csv=True, special_header=False):
+    def __init__(self, the_input, study_name, study_year, sample_type, geo_cord_system, utm_cord_system,
+                 is_csv=False, is_excel=False, is_dict_strings=False, is_dict_filenames=False, special_header=False,
+                 sep=","):
         """
         Initializes one ImportStudy object.
-        :param the_file: csv or excel file containing study data.
+        :param the_input: csv or excel file containing study data.
         :param study_name: string containing name to be given to the study within the database.
         :param study_year: integer representing study year.
         :param sample_type: string containing study type.
         :param geo_cord_system: string specifying coordinate system used in x & y coordinate columns.
         :param utm_cord_system: string specifying coordinate system used in x & y utm coordinate columns.
-        :param is_csv: boolean specifying if input file is a csv (True, default) or an excel file.
+        :param is_csv: boolean specifying if input file is a csv.
+        :param is_excel: boolean specifying if input file is an Excel workbook.
+        :param is_dict_strings: boolean specifying if input file is a dictionary of strings representing csv files.
+        :param is_dict_filenames: boolean specifying if input file is a dictionary of csv filenames.
         :param special_header: boolean specifying if there is formatting in header of excel file that
         must be adhered to.
+        TODO deal with is_csv
         """
         # Initialize variables from parent:
         super().__init__()
         # Initialize variables:
-        self.the_file = the_file
+        self.the_input = the_input
         self.is_csv = is_csv
+        self.is_excel = is_excel
+        if not In_website:
+            self.is_dict_strings = is_dict_strings
+        else:
+            self.is_dict_strings = True
+        # TODO: catch if all are False input types
+        self.is_dict_filenames = is_dict_filenames
+        self.sep = sep
         self.study_name = study_name
         self.study_year = study_year
         self.sample_type = sample_type
@@ -464,12 +524,12 @@ class ImportStudy(ImportTools):
         self.found_template = False
         # Read in study (self.table will be a pandas dataframe if is_csv is True, otherwise will be
         # a list of pandas dataframes:
-        self.table = self.read_in_study(filename=self.the_file)
+        self.table = self.read_in_study(filename=self.the_input)
         # Compare column headers with other studies to see what templates make sense:
         self.compare_with_other_studies()
         if self.found_template:  # If template was found, proceed
             # If study was an excel file, combine into one table, according to template in self.use_template
-            if not self.is_csv:
+            if not isinstance(self.table, pd.DataFrame):  # TODO working properly?
                 self.combine_sheets()
             # If template was found, go ahead and add columns with the study info:
             if self.use_template is not None:
@@ -480,18 +540,43 @@ class ImportStudy(ImportTools):
     def read_in_study(self, filename):
         """
         Read in data stored in "filename".
-        :param filename: excel or csv file containing data.
+        :param filename: excel or csv file containing data or dictionary of strings or dictionary of filenames.
         :return: dataframe (csv) or list of dataframes (excel) containing study data.
+        # TODO edit doc
         """
+        # If input in a csv:
         if self.is_csv:  # TODO: Template 0?
-            table = ImportTools.read_in_csv(filename)
+            table = ImportTools.read_in_csv(filename, sep=self.sep)
             table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
             self.col_names_by_sheet["sheet1"] = table.columns
-        else:
+        # If input is an excel file:
+        elif self.is_excel:
             table = ImportTools.read_in_excel(filename, self.sample_type)
             for t in table:
                 table[t].columns = self.clean_col_names(table[t])
                 self.col_names_by_sheet[t] = table[t].columns
+        # If input is a dictionary of strings:
+        elif self.is_dict_strings:
+            table = ImportTools.read_in_dict_strings(filename, self.sample_type)
+            for t in table:
+                table[t].columns = self.clean_col_names(table[t])
+                self.col_names_by_sheet[t] = table[t].columns
+            # If dictionary is only one entry:
+            if len(table) == 1:
+                for t in table:
+                    table = table[t]
+        # If input is a dictionary of csv filenames:
+        elif self.is_dict_filenames:
+            table = ImportTools.read_in_dict_csvs(filename, self.sample_type, sep=self.sep)
+            for t in table:
+                table[t].columns = self.clean_col_names(table[t])
+                self.col_names_by_sheet[t] = table[t].columns
+            # If dictionary is only one entry:
+            if len(table) == 1:
+                for t in table:
+                    table = table[t]
+        else:
+            print("Must specify input type (is_csv, is_excel, is_dict_strings, is_dict_filenames")
         return table
 
     def combine_sheets(self):
@@ -533,6 +618,8 @@ class ImportStudy(ImportTools):
             self.table["labresult"] = self.table.pop("labresults")
         if "lab results" in self.table:
             self.table["labresult"] = self.table.pop("lab results")
+        if "lab_results" in self.table:
+            self.table["labresult"] = self.table.pop("lab_results")
         self.table["labresult"].rename({"river_mile": "river_mile_dup",
                                         "srid": "srid_dup"}, axis='columns', inplace=True)
         self.table["locations"].rename({"principal_doc": "principal_doc_location"}, axis='columns', inplace=True)
@@ -545,8 +632,6 @@ class ImportStudy(ImportTools):
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
         print(list(self.table["locations"].columns.values))
         group_by_cols = list(self.table["locations"].columns.values)
-        print("Group by cols:")  # TODO remove
-        print(group_by_cols)  # TODO remove
         if "principal_doc_location" in group_by_cols:
             # Make sure principal_doc_location is a string:
             self.table["locations"]["principal_doc_location"] = self.table["locations"]["principal_doc_location"].astype(str)
@@ -619,7 +704,8 @@ class ImportStudy(ImportTools):
                             self.execute_query(query=query)
             # TODO: modify to raise error?
             # Save current known templates:
-            pickle.dump(self.known_templates, open("saved_templates", "wb"))
+            if not In_website:
+                pickle.dump(self.known_templates, open("saved_templates", "wb"))
         else:
             print("Cannot import study if template is unknown")
 
@@ -763,10 +849,11 @@ class ImportStudy(ImportTools):
         self.insert_statement = insert_string
         # Save insert statement to file:
         # TODO: Does this append or overwrite in juyptr?
-        with open(save_to, "w") as my_file:
-            my_file.write(self.insert_statement)
-        if Partial_insert:
-            self.make_smaller_insert_statements(save_to)
+        if not In_website:
+            with open(save_to, "w") as my_file:
+                my_file.write(self.insert_statement)
+            if Partial_insert:
+                self.make_smaller_insert_statements(save_to)
         return save_to
 
     def make_smaller_insert_statements(self, master_statement, perfile=1000):
@@ -775,14 +862,17 @@ class ImportStudy(ImportTools):
         :param master_statement: text file containing master (large) insert_statement.
         :param perfile: number of rows to include per smaller text file.
         :return: list of smaller insert statements
+        # TODO update
         """
         lines = []
         statements = []
-        # Read in master inser statement file:
-        with open(master_statement, "r") as my_file:
-            header = my_file.readline()
-            for line in my_file:
-                lines.append(line)
+        # Pull out header from master statement:
+        #TODO with open(master_statement, "r") as my_file:
+        #TODO     header = my_file.readline()
+        #TODO     for line in my_file:
+        #TODO         lines.append(line)
+        header, master_statement = self.insert_statement.split("\n", maxsplit=1)
+        lines = master_statement.split("\n")
         # Number of rows to insert:
         rows = len(lines)
         files_to_make = math.ceil(rows / perfile)
@@ -803,9 +893,10 @@ class ImportStudy(ImportTools):
                 temp = temp[:-1] + ";"
             # Save smaller insert statement:
             statements.append(temp)
-            filename = f"{self.study_name}_temp_insert_partial_{f}"
-            with open(filename, "w") as my_file2:
-                my_file2.write(temp)
+            if not In_website:
+                filename = f"{self.study_name}_temp_insert_partial_{f}"
+                with open(filename, "w") as my_file2:
+                    my_file2.write(temp)
         return statements
         # TODO: make sure not missing last line
 
@@ -827,11 +918,32 @@ class ImportStudy(ImportTools):
         return build_str
 
 
+def what_is_this(input):
+    # TODO put this back in class
+    pass
+
+
 # main function:
 def main():
     """
     Main function to run to run entire program.
     """
+    # More booleans to specify which part of code to run
+    import_study1 = False  # Phase 1 sediment
+    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = False  # UCR_2010_BeachSD
+    import_study4 = False  # UCR_2011_BeachSD
+    import_study5 = False  # Phase 2 Sediment Teck Data
+    import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
+    import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
+    create_new_table = False  # Cannot be used when it website
+
+    # TODO: currently works: study1, study4, study5, study6, study7
+
+    # TODO: does Bossburg insert statements work?
+    # TODO: need to check that new create statement works
+    # TODO: test that all previous studies still get inserted properly
+    # TODO: do insert statement check before actually inserting
     # Grab global variable:
     global Tunnel
     global Bioed_pw
@@ -851,60 +963,112 @@ def main():
         # Get the bioed password (once):
         Bioed_pw = getpass.getpass(prompt='Password (bioed): ', stream=None)
     # Create table:
-    if Create_new_table:
+    if create_new_table and not In_website:
         our_import.create_table()
     # Import study1:
     # Tunnel = None
-    if Import_study1:
+    if import_study1:
         print("Importing study 1 (Phase 1 Sediment):")
-        study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
+        study1 = ImportStudy(the_input="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
+                             geo_cord_system="unknown_A1", utm_cord_system="unknown_A2", sep="|", is_csv=True)
         study1.run_import()
-    if Import_study2:
+    if import_study2:
         print("Importing study 2 (UCR_2009_BeachSD):")
-        study2 = ImportStudy(the_file="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
+        study2 = ImportStudy(the_input="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_csv=False)
+                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_excel=True)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
-    if Import_study3:
+    if import_study3:
         print("Importing study 3 (UCR_2010_BeachSD):")
-        study3 = ImportStudy(the_file="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
+        study3 = ImportStudy(the_input="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_csv=False)
+                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_excel=True)
         study3.run_import()
-    if Import_study4:
+    if import_study4:
         print("Importing study 4 (UCR_2011_BeachSD):")
-        study4 = ImportStudy(the_file="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
+        study4 = ImportStudy(the_input="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_csv=False)
+                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_excel=True)
         study4.run_import()
-    if Import_study5:
+    if import_study5:
         print("Importing study 5 (Phase 2 Sediment Teck Data):")
-        study5 = ImportStudy(the_file="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
+        study5 = ImportStudy(the_input="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
                              study_year=2013,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_csv=False)
+                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_excel=True)
         study5.run_import()
-    if Import_study6:
+    if import_study6:
         print("Importing study 6 (Bossburg Data):")
-        study6 = ImportStudy(the_file="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
+        study6 = ImportStudy(the_input="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_csv=False)
+                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_excel=True)
         study6.run_import()
-    if Import_study7:
+    if import_study7:
         print("Importing study 7 (Phase 3 Sediment):")
-        study7 = ImportStudy(the_file="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
+        study7 = ImportStudy(the_input="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_csv=False)
+                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_excel=True)
         study7.run_import()
+    if In_jyptr:
+        Tunnel.stop()
+
+def test_code():
+    """
+    Test code for testing if implementation of dictionary of strings and dictionary of CSV works.
+    """
+    # Grab global variable:
+    global Tunnel
+    global Bioed_pw
+    # Set up sshtunnel (for juyptr notebook):
+    our_import = ImportTools()
+    if In_jyptr:
+        # connect to bioed via an ssh tunnel
+        # do NOT include your password, use getpass
+        Tunnel = sshtunnel.SSHTunnelForwarder(
+            ('bioed.bu.edu', 22),
+            ssh_username=Username,
+            ssh_password=getpass.getpass(prompt='Password (bu): ', stream=None),
+            remote_bind_address=('localhost', 4253))
+        # the password requested here is your kerberos password that you use to access bioed
+        # "activate" the ssh tunnel
+        Tunnel.start()
+        # Get the bioed password (once):
+        Bioed_pw = getpass.getpass(prompt='Password (bioed): ', stream=None)
+    # Testing string dicts:
+    im_a_csv = "Phase 1 Sediment.csv"
+    im_a_dict_of_files = {"lab_results": "phase3_labresults.csv", "locations": "phase3_location.csv"}
+    dict_of_strings = {}
+    with open("phase3_labresults.txt", "r", encoding='utf-8-sig') as my_file:
+        my_string = my_file.read()
+    dict_of_strings["labresults"] = my_string
+    with open("phase3_location.txt", "r", encoding='utf-8-sig') as my_file:
+        my_string = my_file.read()
+    # TODO: drop down selecting labresult or locations
+    dict_of_strings["locations"] = my_string
+    string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import4", study_year=9999,
+                               sample_type="Sediment", geo_cord_system="Nonsense1", utm_cord_system="Nonsense3",
+                               is_dict_strings=True)
+    string_study.run_import()
+    # Testing dict of CSV files:
+    dict_of_csvs = {"lab_results": "phase3_labresults.csv", "locations": "phase3_location.csv"}
+    csv_study = ImportStudy(the_input=dict_of_csvs, study_name="CSV Import4", study_year=9999, sample_type="Sediment",
+                            geo_cord_system="Nonsense1", utm_cord_system="Nonsense2", is_dict_filenames=True)
+    csv_study.run_import()
+    # Re-test wacky csv:
+    study1 = ImportStudy(the_input="Phase 1 Sediment.csv", study_name="WackyCSV4", study_year=9999,
+                         sample_type="Sediment",
+                         geo_cord_system="unknown_A1", utm_cord_system="unknown_A2", sep="|", is_csv=True)
+    study1.run_import()
     if In_jyptr:
         Tunnel.stop()
 
 
 if __name__ == '__main__':
     main()
+    test_code()
+
 
 # TODO indexes
 
@@ -916,3 +1080,4 @@ if __name__ == '__main__':
 # TODO: handle data duplication
 # TODO: don't need field measurements for sediment, will need for biological
 # TODO: templates need to be able to handle deleted columns
+# TODO: is column_names.txt handled reasonably?
