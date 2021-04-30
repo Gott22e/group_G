@@ -22,3 +22,17 @@ string_study = ImportStudy(the_input=dict_of_strings, study_name="String FromBio
                            sample_type="Sediment", geo_cord_system="Nonsense1", utm_cord_system="Nonsense3",
                            is_dict_strings=True)
 string_study.run_import()
+
+
+dict_of_strings = {}
+dict_of_strings["labresults"] = file
+dict_of_strings["locations"] = file2
+
+string_study = ImportStudy(the_input=dict_of_strings, study_name=study_name, study_year=study_year,
+                           sample_type="Sediment", geo_cord_system=xy_coord, utm_cord_system=utm_coord,
+                           is_dict_strings=True)
+string_study.run_import()
+
+
+print(type(file))
+print(type(file2))
