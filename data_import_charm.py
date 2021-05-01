@@ -24,13 +24,13 @@ Partial_insert = False  # TODO fix
 # Import tools from Mae Rose:
 import import_tools_MR as mr
 
-
 # Import packages
 if not In_website:
     import sshtunnel
     import getpass
 import pandas as pd
-#TODO import detect_delimiter
+
+# TODO import detect_delimiter
 
 # Don't truncate columns:
 pd.set_option('display.max_columns', None)
@@ -40,10 +40,11 @@ import os
 import math
 import numpy as np
 from io import StringIO
-#TODO import sqlalchemy
+# TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
-#TODO import openpyxl
+
+# TODO import openpyxl
 
 
 # TODO: confirm that the number of rows inserted match the dataset
@@ -65,7 +66,7 @@ import xlrd
 Tunnel = None
 Username = "anau"
 Bioed_pw = None
-Table_to_use = "cr_3"  # TODO change
+Table_to_use = "cr"  # TODO change
 
 
 # TODO fix alignment for certain studies
@@ -176,19 +177,20 @@ class ImportTools:
     """
     # Variables to have in create table statement (in addition to our added variables):
     full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
-                      'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
-                      'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
-                      'composite_type', 'taxon', 'sample_material', 'sample_description',
-                      'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
-                      'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                      'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
-                      'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
-                      'detection_limit', 'reporting_limit', 'undetected', 'estimated',
-                      'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
-                      'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
-                      'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
-                      'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
-                      'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft']
+                 'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
+                 'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
+                 'composite_type', 'taxon', 'sample_material', 'sample_description',
+                 'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
+                 'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
+                 'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                 'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
+                 'detection_limit', 'reporting_limit', 'undetected', 'estimated',
+                 'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
+                 'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
+                 'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                 'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
+                 'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft',
+                 'reach', 'station']
 
     def __init__(self):
         """
@@ -223,7 +225,7 @@ class ImportTools:
                                  'undetected', 'estimated',
                                  'rejected', 'greater_than', 'tic', 'reportable',
                                  'alias_id', "cas_rn", 'lab_rep',
-                                 'qapp_deviation', 'nd_reported_to', 'elev_unit']
+                                 'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station']
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
 
     @staticmethod
@@ -467,14 +469,14 @@ class ImportTools:
         # Replace undesired characters with _
         for col in cols:
             new_col = col.lower()
-            new_col = new_col.lstrip(" ")
-            new_col = new_col.rstrip(" ")
+            new_col = new_col.strip()
             for char in ["(", ")", ":", ";", " ", "-"]:
                 new_col = new_col.replace(char, "_")
             for _ in range(5):
                 new_col = new_col.replace("__", "_")
             if new_col in dict_of_swaps:
                 new_col = dict_of_swaps[new_col]
+            new_col = new_col.strip("_")
             new_names.append(new_col)
         return new_names
 
@@ -546,7 +548,7 @@ class ImportStudy(ImportTools):
         self.compare_with_other_studies()
         if self.found_template:  # If template was found, proceed
             # If study was an excel file, combine into one table, according to template in self.use_template
-            if not isinstance(self.table, pd.DataFrame):  # TODO working properly?
+            if not isinstance(self.table, pd.DataFrame) or self.special_header:  # TODO working properly?
                 self.combine_sheets()
             # If template was found, go ahead and add columns with the study info:
             if self.use_template is not None:
@@ -565,7 +567,7 @@ class ImportStudy(ImportTools):
             table = self.read_in_special_filename()
             table.columns = self.clean_col_names(table)
             self.col_names_by_sheet["sheet1"] = table.columns
-        #TODO: handle dict of strings with special header
+        # TODO: handle dict of strings with special header
         # If input in a csv:
         elif self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename, sep=self.sep)
@@ -616,19 +618,20 @@ class ImportStudy(ImportTools):
             main_file = list(main_file)[0]
             main_file = self.the_input[main_file]
             temp = mr.allisort(fileIn=main_file,
-                                     keys=self.special_col_names_expand,
-                                     values=self.special_cols_with_values,
-                                     merge=new_merge_dict, add=self.special_add_units_to_cols)
+                               keys=self.special_col_names_expand,
+                               values=self.special_cols_with_values,
+                               merge=new_merge_dict, add=self.special_add_units_to_cols)
             table = temp.DF
             if "Value" in table.columns:
                 table.dropna(axis=0, subset=["Value"], inplace=True)
+                table.reset_index(drop=True)
         return table
-
 
     def combine_sheets(self):
         """
         Combines sheets that were stored in study's excel data file, according to template.
         This should not be used if template is unknown.
+        TODO update doc to talk about special
         """
         template = self.use_template
         temp_table = None
@@ -682,11 +685,13 @@ class ImportStudy(ImportTools):
         group_by_cols = list(self.table["locations"].columns.values)
         if "principal_doc_location" in group_by_cols:
             # Make sure principal_doc_location is a string:
-            self.table["locations"]["principal_doc_location"] = self.table["locations"]["principal_doc_location"].astype(str)
+            self.table["locations"]["principal_doc_location"] = self.table["locations"][
+                "principal_doc_location"].astype(str)
             group_by_cols.remove("principal_doc_location")
             # TODO: go back to group by all other columns:
-            #TODO self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
-            self.table["locations"] = self.table["locations"].groupby(["location_id"])['principal_doc_location'].apply(', '.join).reset_index()
+            # TODO self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
+            self.table["locations"] = self.table["locations"].groupby(["location_id"])['principal_doc_location'].apply(
+                ', '.join).reset_index()
         print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
@@ -694,8 +699,31 @@ class ImportStudy(ImportTools):
         return temp_table
 
     def template4_clean(self):
-        self.table.to_csv("temp.csv")
-        pass
+        # TODO
+        self.table.drop("reach_y", axis=1, inplace=True)
+        change_dict = {"reach_x": "reach",
+                       "field_sampling_date": "sample_date",
+                       "sampling_coordinates_utm_zone_11_easting": "utm_x",
+                       "sampling_coordinates_utm_zone_11_northing": "utm_y",
+                       "sample_type_1": "sample_description",
+                       "lab_sample_id": "sample_no",
+                       "field_id": "sampcoll_id",
+                       "value": "meas_value"}
+        for key in change_dict:
+            if key in self.table:
+                self.table[change_dict[key]] = self.table.pop(key)
+                if key == "sampling_coordinates_utm_zone_11_easting" or key == "sampling_coordinates_utm_zone_11_northing":
+                    self.utm_cord_system = "UTM Zone 11"  # TODO did this change it?
+        if "sample_depth_range_in_inches_from_surface" in self.table:
+            temp = pd.DataFrame(self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
+            self.table["upper_depth"] = temp[0]
+            self.table["lower_depth"] = temp[1]
+            self.table.drop(columns=["sample_depth_range_in_inches_from_surface"], inplace=True)
+            for col in ["upper_depth", "lower_depth"]:
+                self.table[col] = pd.to_numeric(self.table[col])
+            # TODO: add units column
+            # TODO convert to feet?
+        # TODO remove self.table.to_csv("temp.csv")
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
         """
@@ -919,10 +947,10 @@ class ImportStudy(ImportTools):
         lines = []
         statements = []
         # Pull out header from master statement:
-        #TODO with open(master_statement, "r") as my_file:
-        #TODO     header = my_file.readline()
-        #TODO     for line in my_file:
-        #TODO         lines.append(line)
+        # TODO with open(master_statement, "r") as my_file:
+        # TODO     header = my_file.readline()
+        # TODO     for line in my_file:
+        # TODO         lines.append(line)
         header, master_statement = self.insert_statement.split("\n", maxsplit=1)
         lines = master_statement.split("\n")
         # Number of rows to insert:
@@ -989,7 +1017,7 @@ def main():
     import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
     import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
     import_study8 = True  # Phase 2 Sediment Trustee Data
-    create_new_table = False  # Cannot be used when it website
+    create_new_table = True  # Cannot be used when it website
 
     # TODO: currently works: study1, study4, study5, study6, study7
 
@@ -1078,7 +1106,8 @@ def main():
         study8 = ImportStudy(the_input=s8_files,
                              study_name="Phase 2 Sediment Trustee Data",
                              study_year=2013, sample_type="Sediment",
-                             geo_cord_system="unknown_H1", utm_cord_system="UTM Zone 11", is_dict_filenames=True,
+                             geo_cord_system="unknown_H1", utm_cord_system="UTM Zone 11_check_code",
+                             is_dict_filenames=True,
                              special_header=True,
                              special_col_names_expand=s8_col_expand,
                              special_cols_with_values=s8_val,
@@ -1087,6 +1116,7 @@ def main():
         study8.run_import()
     if In_jyptr:
         Tunnel.stop()
+
 
 def test_code():
     """
@@ -1144,7 +1174,6 @@ if __name__ == '__main__':
     main()
     if run_test_code:
         test_code()
-
 
 # TODO indexes
 
