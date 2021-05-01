@@ -32,6 +32,7 @@ class allisort():
             self.f.columns = self.f.iloc[col,]
             for i in range(col + 1):
                 self.f = self.f.drop([i, ])
+        # TODO: handle for multiple sheets
         # Define file name to output to
         self.outFile = self.setOutputFilename(file_out)
 
