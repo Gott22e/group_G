@@ -47,6 +47,10 @@ import xlrd
 # TODO import openpyxl
 
 
+# TODO: Fix where duplicated columns go if one is entirely NULLS
+# TODO: (See: river_mile_dup in Phase 2 Sediment Teck data)
+# TODO: maybe drop empty columns... or iterate through
+
 # TODO: confirm that the number of rows inserted match the dataset
 
 # TODO deal with NaN, None, Null, etc.
