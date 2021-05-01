@@ -15,8 +15,8 @@ For issues with this script, contact Allison Nau.
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
+In_pycharm = False  # TODO fix
+In_jyptr = True  # TODO fix
 In_website = False
 
 Partial_insert = False  # TODO fix
@@ -61,6 +61,8 @@ import xlrd
 # TODO compare insert string between juyptr and pycharm
 # TODO error catching when insert statements don't work (including: when field is too long for database)
 
+# TODO Add INDEXES AT END OF SCRIPT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# TODO INDEXES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 # Global variables:
 Tunnel = None
@@ -71,6 +73,7 @@ Table_to_use = "cr"  # TODO change
 
 # TODO fix alignment for certain studies
 # TODO: add column names in
+
 
 class NoKnownTemplate(Exception):
     """
@@ -143,9 +146,9 @@ class KnownStudyTemplates:
               'alias_id', 'comments', 'river_mile', 'x_coord', 'y_coord', 'srid'],
              ['location_id', 'principal_doc', 'river_mile', 'utm_x', 'utm_y', 'srid']],
             [['reach_x', 'station', 'lab_sample_id', 'field_id', 'analyte', 'units', 'value', 'reach_y',
-              'sample_type_1', 'sampling_coordinates_utm_zone_11_easting_',
-              'sampling_coordinates_utm_zone_11_northing_', 'field_sampling_date',
-              'sample_depth_range_in_inches_from_surface_']]
+              'sample_type_1', 'sampling_coordinates_utm_zone_11_easting',
+              'sampling_coordinates_utm_zone_11_northing', 'field_sampling_date',
+              'sample_depth_range_in_inches_from_surface']]
         ]
         # TODO: generalize template 1 and 2 and 3 together
         print(f"Length of study templates: {len(self.templates)}")  # TODO remove
@@ -182,7 +185,7 @@ class ImportTools:
                  'composite_type', 'taxon', 'sample_material', 'sample_description',
                  'subsamp_type', 'upper_depth', 'lower_depth', 'depth_units',
                  'material_analyzed', 'method_code', 'meas_basis', 'lab_rep', 'analyte',
-                 'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units',
+                 'full_name', 'cas_rn', 'original_lab_result', 'meas_value', 'units', "value_note",
                  'sig_figs', 'lab_flags', 'qa_level', 'lab_conc_qual', 'validator_flags',
                  'detection_limit', 'reporting_limit', 'undetected', 'estimated',
                  'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
@@ -225,7 +228,7 @@ class ImportTools:
                                  'undetected', 'estimated',
                                  'rejected', 'greater_than', 'tic', 'reportable',
                                  'alias_id', "cas_rn", 'lab_rep',
-                                 'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station']
+                                 'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station', "value_note"]
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
 
     @staticmethod
@@ -238,7 +241,6 @@ class ImportTools:
         Static method.
         """
         # Is first row column names or second row?
-        # TODO: test on original csv
         temp_table_v1 = pd.read_csv(filename, sep=sep, header=1)
         header_v1 = set(temp_table_v1.columns)
         intersection_v1 = header_v1.intersection(ImportTools.full_list)
@@ -494,7 +496,12 @@ class ImportStudy(ImportTools):
                  special_cols_with_values=None, special_add_units_to_cols=None, special_merge_with=None):
         """
         Initializes one ImportStudy object.
-        :param the_input: csv or excel file containing study data.
+        :param the_input: csv or excel file containing study data. Can also be a dictionary of csv filenames, where
+        the key represents the expected sheet name (to preserve the relationships between sheets), and the value being
+        a string with the csv file name. Can also be a dictionary of strings, where the key represents the expected
+        sheet name (to preserve the relationships between sheets) and the string is a csv file copied over from a
+        text editor (i.e. a string representing a CSV file).
+        Expect sheet names like: ["labresults", "locations", "chemistry", "location and depth"]
         :param study_name: string containing name to be given to the study within the database.
         :param study_year: integer representing study year.
         :param sample_type: string containing study type.
@@ -506,8 +513,19 @@ class ImportStudy(ImportTools):
         :param is_dict_filenames: boolean specifying if input file is a dictionary of csv filenames.
         :param special_header: boolean specifying if there is formatting in header of excel file that
         must be adhered to.
-        TODO deal with is_csv
-        TODO add in docs for MR vars
+        If special_header is True, then there are some additional parameters:
+        :param special_col_names_expand: for data that needs to be rearranged from column to row format, these
+        are the new column names. For example, if analytes represent multiple columns and are being converted from
+        wide format to long format, the new column names might be "Analyte", "Units", "Value".
+        :param special_cols_with_values: list representing the indexes of columns that contain numerical data to convert
+        to row format.
+        :param special_add_units_to_cols: dictionary of units (keys) associated with the columns being arranged
+        into rows and a list of column indexes those units apply to (values).
+        e.g. {"%": list(range(4, 16)), "(mg/kg)": list(range(16, 26))}
+        :param special_merge_with: dictionary containing information needed to merge with the primary input sheet. The
+        key is the sheet name to be added to the primary sheet, and the value is a list of column names for the merge
+        to be performed on. The primary sheet should not be included in this dictionary.
+        e.g. {"location and depth": ["Station", "Lab Sample ID", "Field ID"]}.
         """
         # Initialize variables from parent:
         super().__init__()
@@ -549,7 +567,7 @@ class ImportStudy(ImportTools):
         if self.found_template:  # If template was found, proceed
             # If study was an excel file, combine into one table, according to template in self.use_template
             if not isinstance(self.table, pd.DataFrame) or self.special_header:  # TODO working properly?
-                self.combine_sheets()
+                self.combine_sheets_rearranges()
             # If template was found, go ahead and add columns with the study info:
             if self.use_template is not None:
                 self.finish_building_table()  # Finish building table, including added columns with study info
@@ -559,10 +577,14 @@ class ImportStudy(ImportTools):
     def read_in_study(self, filename):
         """
         Read in data stored in "filename".
-        :param filename: excel or csv file containing data or dictionary of strings or dictionary of filenames.
+        :param filename: csv or excel file containing study data. Can also be a dictionary of csv filenames, where
+        the key represents the expected sheet name (to preserve the relationships between sheets), and the value being
+        a string with the csv file name. Can also be a dictionary of strings, where the key represents the expected
+        sheet name (to preserve the relationships between sheets) and the string is a csv file copied over from a
+        text editor (i.e. a string representing a CSV file).
         :return: dataframe (csv) or list of dataframes (excel) containing study data.
-        # TODO edit doc
         """
+        # If there is a special header, and a dictionary of filenames was received:
         if self.special_header and self.is_dict_filenames:
             table = self.read_in_special_filename()
             table.columns = self.clean_col_names(table)
@@ -604,7 +626,11 @@ class ImportStudy(ImportTools):
         return table
 
     def read_in_special_filename(self):
-        # TODO
+        """
+        Reads in dictionary of csv filenames, when the header has special requirements (i.e. analytes are arranged by
+        column.)
+        :return: dataframe containing data stored in csv files.
+        """
         new_merge_dict = {}
         table = None
         for key in self.special_merge_with:
@@ -627,9 +653,10 @@ class ImportStudy(ImportTools):
                 table.reset_index(drop=True)
         return table
 
-    def combine_sheets(self):
+    def combine_sheets_rearranges(self):
         """
         Combines sheets that were stored in study's excel data file, according to template.
+        Also handles a single sheet IF data needs to be rearranged or modified.
         This should not be used if template is unknown.
         TODO update doc to talk about special
         """
@@ -699,7 +726,10 @@ class ImportStudy(ImportTools):
         return temp_table
 
     def template4_clean(self):
-        # TODO
+        """
+        Cleans up studies that follow template 4.
+        :return: cleaned up dataframe. This dataframe is already stored in self.table.
+        """
         self.table.drop("reach_y", axis=1, inplace=True)
         change_dict = {"reach_x": "reach",
                        "field_sampling_date": "sample_date",
@@ -712,8 +742,6 @@ class ImportStudy(ImportTools):
         for key in change_dict:
             if key in self.table:
                 self.table[change_dict[key]] = self.table.pop(key)
-                if key == "sampling_coordinates_utm_zone_11_easting" or key == "sampling_coordinates_utm_zone_11_northing":
-                    self.utm_cord_system = "UTM Zone 11"  # TODO did this change it?
         if "sample_depth_range_in_inches_from_surface" in self.table:
             temp = pd.DataFrame(self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
             self.table["upper_depth"] = temp[0]
@@ -721,9 +749,17 @@ class ImportStudy(ImportTools):
             self.table.drop(columns=["sample_depth_range_in_inches_from_surface"], inplace=True)
             for col in ["upper_depth", "lower_depth"]:
                 self.table[col] = pd.to_numeric(self.table[col])
-            # TODO: add units column
-            # TODO convert to feet?
-        # TODO remove self.table.to_csv("temp.csv")
+            self.table["depth_units"] = "in"
+        self.table["sample_date"] = pd.to_datetime(self.table["sample_date"])
+        # Handle values listed as <0.5:
+        self.table["value_note"] = "Null"
+        self.table.loc[self.table["meas_value"] == "<0.5", "value_note"] = "<0.5"
+        self.table.loc[self.table["meas_value"] == "<0.5", "meas_value"] = 0
+        # Handle cells that should be empty but instead have "--"
+        self.table.loc[self.table["meas_value"] == "--", "meas_value"] = ""
+        self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
+        #TODO self.table.to_csv("temp.csv")
+        return self.table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
         """
@@ -755,7 +791,6 @@ class ImportStudy(ImportTools):
         self.table.insert(2, column="sample_type", value=self.sample_type)
         self.table.insert(3, column="geo_cord_system", value=self.geo_cord_system)
         self.table.insert(4, column="utm_cord_system", value=self.utm_cord_system)
-        # TODO: handle filling in missing columns? -> probably not necessary
         print("Column names after table built:")
         print(self.table.columns)
 
@@ -859,7 +894,6 @@ class ImportStudy(ImportTools):
                     self.known_templates.study_temps[self.study_name] = i
                     print(f"Study matching template found, template #: {i}")
                     break
-                    # TODO: test!!!!!!!
             if not self.found_template:
                 print("STUDY TEMPLATE NOT FOUND, must be created")
 
@@ -938,19 +972,15 @@ class ImportStudy(ImportTools):
 
     def make_smaller_insert_statements(self, master_statement, perfile=1000):
         """
-        Function makes smaller insert statements within text files for use in testing.
-        :param master_statement: text file containing master (large) insert_statement.
-        :param perfile: number of rows to include per smaller text file.
+        Function makes smaller insert statements within text files for use in testing (only if In_website=False).
+        Also returns list of smaller insert statements.
+        :param master_statement: string containing master (large) insert_statement.
+        :param perfile: number of rows to include per smaller text file (default 1000).
         :return: list of smaller insert statements
-        # TODO update
         """
         lines = []
         statements = []
         # Pull out header from master statement:
-        # TODO with open(master_statement, "r") as my_file:
-        # TODO     header = my_file.readline()
-        # TODO     for line in my_file:
-        # TODO         lines.append(line)
         header, master_statement = self.insert_statement.split("\n", maxsplit=1)
         lines = master_statement.split("\n")
         # Number of rows to insert:
@@ -1009,25 +1039,17 @@ def main():
     Main function to run to run entire program.
     """
     # More booleans to specify which part of code to run
-    import_study1 = False  # Phase 1 sediment
-    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-    import_study3 = False  # UCR_2010_BeachSD
-    import_study4 = False  # UCR_2011_BeachSD
-    import_study5 = False  # Phase 2 Sediment Teck Data
-    import_study6 = False  # Bossburg  # TODO: some of the rows aren't getting inserted, and this didn't break anything else
-    import_study7 = False  # Phase 3 sediment  # TODO: this DID successfully insert
+    import_study1 = True  # Phase 1 sediment
+    import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = True  # UCR_2010_BeachSD
+    import_study4 = True  # UCR_2011_BeachSD
+    import_study5 = True  # Phase 2 Sediment Teck Data
+    import_study6 = True  # Bossburg
+    import_study7 = True  # Phase 3 sediment
     import_study8 = True  # Phase 2 Sediment Trustee Data
     create_new_table = True  # Cannot be used when it website
-
     # TODO: currently works: study1, study4, study5, study6, study7
-
-    # TODO: does Bossburg insert statements work?
-    # TODO: need to check that new create statement works
-    # TODO: test that all previous studies still get inserted properly
     # TODO: do insert statement check before actually inserting
-
-    # TODO: Put in geographical coordinate system
-
     # Grab global variable:
     global Tunnel
     global Bioed_pw
@@ -1055,45 +1077,45 @@ def main():
         print("Importing study 1 (Phase 1 Sediment):")
         study1 = ImportStudy(the_input="Phase 1 Sediment.csv", study_name="Phase1Sediment", study_year=2005,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_A1", utm_cord_system="unknown_A2", sep="|", is_csv=True)
+                             geo_cord_system="NAD83 UTM Zone 11U ", utm_cord_system="Null", sep="|", is_csv=True)
         study1.run_import()
     if import_study2:
         print("Importing study 2 (UCR_2009_BeachSD):")
-        study2 = ImportStudy(the_input="UCR_2009_BeachSD.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
+        study2 = ImportStudy(the_input="UCR_2009_BeachSD_fixed.xlsx", study_name="UCR_2009_BeachSD", study_year=2009,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_B1", utm_cord_system="unknown_B2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study2.run_import()
         # TODO: handle "RinseBlank" in location table
     if import_study3:
         print("Importing study 3 (UCR_2010_BeachSD):")
-        study3 = ImportStudy(the_input="UCR_2010_BeachSD.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
+        study3 = ImportStudy(the_input="UCR_2010_BeachSD_fixed.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_C1", utm_cord_system="unknown_C2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study3.run_import()
     if import_study4:
         print("Importing study 4 (UCR_2011_BeachSD):")
         study4 = ImportStudy(the_input="UCR_2011_BeachSD.xlsx", study_name="UCR_2011_BeachSD", study_year=2011,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_D1", utm_cord_system="unknown_D2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study4.run_import()
     if import_study5:
         print("Importing study 5 (Phase 2 Sediment Teck Data):")
         study5 = ImportStudy(the_input="Phase 2 Sediment Teck Data.xls", study_name="Phase 2 Sediment Teck Data",
                              study_year=2013,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_E1", utm_cord_system="unknown_E2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study5.run_import()
     if import_study6:
         print("Importing study 6 (Bossburg Data):")
         study6 = ImportStudy(the_input="Bossburg Data.xls", study_name="Bossburg", study_year=2015,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_F1", utm_cord_system="unknown_F2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study6.run_import()
     if import_study7:
         print("Importing study 7 (Phase 3 Sediment):")
         study7 = ImportStudy(the_input="Phase 3 Sediment.xlsx", study_name="Phase 3 Sediment", study_year=2019,
                              sample_type="Sediment",
-                             geo_cord_system="unknown_G1", utm_cord_system="unknown_G2", is_excel=True)
+                             geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study7.run_import()
     if import_study8:
         print("Importing study 8 (Phase 2 Sediment Trustee):")
@@ -1106,7 +1128,7 @@ def main():
         study8 = ImportStudy(the_input=s8_files,
                              study_name="Phase 2 Sediment Trustee Data",
                              study_year=2013, sample_type="Sediment",
-                             geo_cord_system="unknown_H1", utm_cord_system="UTM Zone 11_check_code",
+                             geo_cord_system="Null", utm_cord_system="NAD83 UTM Zone 11U",
                              is_dict_filenames=True,
                              special_header=True,
                              special_col_names_expand=s8_col_expand,
@@ -1114,6 +1136,8 @@ def main():
                              special_add_units_to_cols=s8_add,
                              special_merge_with=s8_merge)
         study8.run_import()
+        # TODO: convert to handle accepting strings
+    # TODO core sample results MAY BE "WGS84"
     if In_jyptr:
         Tunnel.stop()
 
@@ -1186,3 +1210,4 @@ if __name__ == '__main__':
 # TODO: don't need field measurements for sediment, will need for biological
 # TODO: templates need to be able to handle deleted columns
 # TODO: is column_names.txt handled reasonably?
+# TODO: handle special headers for study 8 & 9 as strings
