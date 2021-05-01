@@ -496,6 +496,7 @@ class ImportStudy(ImportTools):
                  special_cols_with_values=None, special_add_units_to_cols=None, special_merge_with=None):
         """
         Initializes one ImportStudy object.
+        NOTE: files with a special header CANNOT be accepted as an excel file.
         :param the_input: csv or excel file containing study data. Can also be a dictionary of csv filenames, where
         the key represents the expected sheet name (to preserve the relationships between sheets), and the value being
         a string with the csv file name. Can also be a dictionary of strings, where the key represents the expected
@@ -730,7 +731,9 @@ class ImportStudy(ImportTools):
         Cleans up studies that follow template 4.
         :return: cleaned up dataframe. This dataframe is already stored in self.table.
         """
+        # Drop duplicated number:
         self.table.drop("reach_y", axis=1, inplace=True)
+        # Rename columns:
         change_dict = {"reach_x": "reach",
                        "field_sampling_date": "sample_date",
                        "sampling_coordinates_utm_zone_11_easting": "utm_x",
@@ -742,6 +745,7 @@ class ImportStudy(ImportTools):
         for key in change_dict:
             if key in self.table:
                 self.table[change_dict[key]] = self.table.pop(key)
+        # Break apart sample depth column:
         if "sample_depth_range_in_inches_from_surface" in self.table:
             temp = pd.DataFrame(self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
             self.table["upper_depth"] = temp[0]
@@ -750,6 +754,7 @@ class ImportStudy(ImportTools):
             for col in ["upper_depth", "lower_depth"]:
                 self.table[col] = pd.to_numeric(self.table[col])
             self.table["depth_units"] = "in"
+        # Convert date column to date format:
         self.table["sample_date"] = pd.to_datetime(self.table["sample_date"])
         # Handle values listed as <0.5:
         self.table["value_note"] = "Null"
