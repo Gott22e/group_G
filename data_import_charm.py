@@ -15,8 +15,8 @@ For issues with this script, contact Allison Nau.
 
 # Booleans to specify what parts of the code to run:
 # In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = False  # TODO fix
-In_jyptr = True  # TODO fix
+In_pycharm = True  # TODO fix
+In_jyptr = False  # TODO fix
 In_website = False
 
 Partial_insert = False  # TODO fix
@@ -46,6 +46,7 @@ import xlrd
 
 # TODO import openpyxl
 
+# TODO: check all metal names are consistent in table, and we don't have some random weird ones
 
 # TODO: Fix where duplicated columns go if one is entirely NULLS
 # TODO: (See: river_mile_dup in Phase 2 Sediment Teck data)
@@ -152,7 +153,9 @@ class KnownStudyTemplates:
             [['reach_x', 'station', 'lab_sample_id', 'field_id', 'analyte', 'units', 'value', 'reach_y',
               'sample_type_1', 'sampling_coordinates_utm_zone_11_easting',
               'sampling_coordinates_utm_zone_11_northing', 'field_sampling_date',
-              'sample_depth_range_in_inches_from_surface']]
+              'sample_depth_range_in_inches_from_surface']],
+            [['sample_id', 'longitude', 'latitude', 'date_collected', 'top_depth', 'bottom_depth', 'dept_unit',
+              'analyte', 'units', 'value']]
         ]
         # TODO: generalize template 1 and 2 and 3 together
         print(f"Length of study templates: {len(self.templates)}")  # TODO remove
@@ -591,10 +594,18 @@ class ImportStudy(ImportTools):
         """
         # If there is a special header, and a dictionary of filenames was received:
         if self.special_header and self.is_dict_filenames:
-            table = self.read_in_special_filename()
+            table = self.read_in_special_dict_filename()
             table.columns = self.clean_col_names(table)
             self.col_names_by_sheet["sheet1"] = table.columns
         # TODO: handle dict of strings with special header
+        # If there is a special header, and a csv was received:
+        elif self.special_header and self.is_csv:
+            table = self.read_in_special_csv()
+            # TODO handle non-csvs seps?
+            table.columns = self.clean_col_names(table)
+            self.col_names_by_sheet["sheet1"] = table.columns
+            print(table.head(n=5))  # TODO remove
+            table.to_csv("temp2.csv")
         # If input in a csv:
         elif self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename, sep=self.sep)
@@ -628,9 +639,20 @@ class ImportStudy(ImportTools):
                     table = table[t]
         else:
             print("Must specify input type (is_csv, is_excel, is_dict_strings, is_dict_filenames")
+            print("Must give files with a special header (merged columns, analytes arranged by column, etc.) as")
+            print("either a csv or a dictionary of csv filenames.")
         return table
 
-    def read_in_special_filename(self):
+    def read_in_special_csv(self):
+        # TODO
+        temp = mr.allisort(fileIn=self.the_input,
+                           keys=self.special_col_names_expand,
+                           values=self.special_cols_with_values,
+                           add=self.special_add_units_to_cols)
+        table = temp.DF
+        return table
+
+    def read_in_special_dict_filename(self):
         """
         Reads in dictionary of csv filenames, when the header has special requirements (i.e. analytes are arranged by
         column.)
@@ -672,6 +694,8 @@ class ImportStudy(ImportTools):
             temp_table = self.template1_clean()
         elif template == 4:
             temp_table = self.template4_clean()
+        elif template == 5:
+            temp_table = self.template5_clean()
         else:  # If template is not known:
             print("Not recognized template study")
             for col, names in self.col_names_by_sheet.items():
@@ -768,6 +792,36 @@ class ImportStudy(ImportTools):
         self.table.loc[self.table["meas_value"] == "--", "meas_value"] = ""
         self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
         #TODO self.table.to_csv("temp.csv")
+        return self.table
+
+    def template5_clean(self):
+        # TODO
+        # Change column names:
+        change_dict = {"date_collected": "sample_date",
+                        "top_depth": "upper_depth",
+                        "bottom_depth": "lower_depth",
+                        "dept_unit": "depth_units",
+                        "longitude": "x_coord",
+                        "latitude": "y_coord",
+                        "value": "meas_value"}
+        # TODO: pop this out as own method:
+        for key in change_dict:
+            if key in self.table:
+                self.table[change_dict[key]] = self.table.pop(key)
+        # Clean analyte names
+        # TODO: pop this out as own method
+        self.table["analyte"] = self.table["analyte"].str.replace(" (mg/kg)", "", regex=False)
+        self.table["analyte"] = self.table["analyte"].str.replace(" (mg/Kg)", "", regex=False)
+        # Break apart values with flags:
+        # TODO temp = pd.DataFrame(self.table["meas_value"].str.split(" ", n=1, expand=True))
+        temp = pd.DataFrame(self.table["meas_value"].str.split(expand=True))
+        self.table["meas_value_temp"] = temp[0]   #TODO change back
+        self.table["lab_flags"] = temp[1]
+        self.table["meas_value_temp"].fillna(self.table["meas_value"], inplace=True)
+        self.table["meas_value"] = self.table["meas_value_temp"]
+        self.table.drop(columns=["meas_value_temp"], inplace=True)
+        #TODO put back self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
+        self.table.to_csv("temp3.csv")  # TODO remove
         return self.table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
@@ -1048,15 +1102,16 @@ def main():
     Main function to run to run entire program.
     """
     # More booleans to specify which part of code to run
-    import_study1 = True  # Phase 1 sediment
-    import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-    import_study3 = True  # UCR_2010_BeachSD
-    import_study4 = True  # UCR_2011_BeachSD
-    import_study5 = True  # Phase 2 Sediment Teck Data
-    import_study6 = True  # Bossburg
-    import_study7 = True  # Phase 3 sediment
-    import_study8 = True  # Phase 2 Sediment Trustee Data
-    create_new_table = True  # Cannot be used when it website
+    import_study1 = False  # Phase 1 sediment
+    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = False  # UCR_2010_BeachSD
+    import_study4 = False  # UCR_2011_BeachSD
+    import_study5 = False  # Phase 2 Sediment Teck Data
+    import_study6 = False  # Bossburg
+    import_study7 = False  # Phase 3 sediment
+    import_study8 = False  # Phase 2 Sediment Trustee Data
+    import_study9 = True  # Core Sample Results
+    create_new_table = False  # Cannot be used when it website
     # TODO: currently works: study1, study4, study5, study6, study7
     # TODO: do insert statement check before actually inserting
     # Grab global variable:
@@ -1131,7 +1186,8 @@ def main():
         s8_files = {"chemistry": "phase2_sediment_trustee_chemistry_v2.csv",
                     "location and depth": "phase2_sediment_trustee_location_v2.csv"}
         s8_val = list(range(4, 26))
-        s8_add = {"%": list(range(4, 16)), "(mg/kg)": list(range(16, 26))}
+        # TODO: check that taking paranthesis out didn't break anything
+        s8_add = {"%": list(range(4, 16)), "mg/kg": list(range(16, 26))}
         s8_merge = {"location and depth": ["Station", "Lab Sample ID", "Field ID"]}
         s8_col_expand = ["Analyte", "Units", "Value"]
         study8 = ImportStudy(the_input=s8_files,
@@ -1145,6 +1201,26 @@ def main():
                              special_add_units_to_cols=s8_add,
                              special_merge_with=s8_merge)
         study8.run_import()
+    if import_study9:
+        print("Importing study 9 (Core Sample Results)")
+        s9_file = "core_sample_results_data.csv"
+        s9_val = list(range(7, 31))
+        s9_add = {"mg/kg": list(range(7, 30)), "%": [30]}
+        # TODO need percent sign
+        #TODO remove s9_add = {"mg/kg": list(range(7, 30))}
+        s9_col_expand = ["Analyte", "Units", "Value"]
+        # TODO: check units applied to correct columns
+        # TODO: check split with flag
+
+        study9 = ImportStudy(the_input=s9_file,
+                             study_name="Core Sample Results",
+                             study_year=2010, sample_type="Sediment",
+                             geo_cord_system="WGS84_maybe", utm_cord_system="Null",
+                             is_csv=True, special_header=True,
+                             special_col_names_expand=s9_col_expand,
+                             special_cols_with_values=s9_val,
+                             special_add_units_to_cols=s9_add)
+        study9.run_import()
         # TODO: convert to handle accepting strings
     # TODO core sample results MAY BE "WGS84"
     if In_jyptr:
@@ -1184,6 +1260,7 @@ def test_code():
         my_string = my_file.read()
     # TODO: drop down selecting labresult or locations
     dict_of_strings["locations"] = my_string
+    print(my_string)  # Just to see what format the string is in
     string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import4", study_year=9999,
                                sample_type="Sediment", geo_cord_system="Nonsense1", utm_cord_system="Nonsense3",
                                is_dict_strings=True)
