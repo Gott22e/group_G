@@ -43,7 +43,8 @@ class allisort():
 
         # merges DF
         self.DF = self.mergeDF(merge)
-        self.DF.to_csv(self.outFile, index=False)
+        if file_out: # TODO: does this successfully suppress?
+            self.DF.to_csv(self.outFile, index=False)
 
     """Adds the key of a dict to the int values defined for it """
 
