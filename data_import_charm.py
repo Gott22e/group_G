@@ -752,6 +752,11 @@ class ImportStudy(ImportTools):
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
         temp_table = self.clean_numeric_cols_of_nulls(temp_table)
+        # Clean up analyte values
+        temp_table["analyte"] = temp_table["analyte"].str.replace("TOC", "Carbon_org", regex=False)
+        # Copy river_mile_dup if other column doesn't exist:
+        if "river_mile" not in temp_table:
+            temp_table["river_mile"] = temp_table["river_mile_dup"]
         return temp_table
 
     def template4_clean(self):
@@ -793,6 +798,11 @@ class ImportStudy(ImportTools):
         # Handle cells that should be empty but instead have "--"
         self.table.loc[self.table["meas_value"] == "--", "meas_value"] = ""
         self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
+        # Copy x and y coord over if needed
+        if "x_coord" not in self.table and "y_coord" not in self.table:
+            self.table["x_coord"] = self.table["utm_x"]
+            self.table["y_coord"] = self.table["utm_y"]
+            self.geo_cord_system = self.utm_cord_system
         return self.table
 
     def template5_clean(self):
@@ -1116,7 +1126,7 @@ def main():
     import_study5 = True  # Phase 2 Sediment Teck Data
     import_study6 = True  # Bossburg
     import_study7 = True  # Phase 3 sediment
-    import_study8 = True  # Phase 2 Sediment Trustee Data
+    import_study8 = True # Phase 2 Sediment Trustee Data
     import_study9 = True  # Core Sample Results
     create_new_table = True  # Cannot be used when it website
     # Grab global variable:
@@ -1191,7 +1201,6 @@ def main():
         s8_files = {"chemistry": "phase2_sediment_trustee_chemistry_v2.csv",
                     "location and depth": "phase2_sediment_trustee_location_v2.csv"}
         s8_val = list(range(4, 26))
-        # TODO: check that taking paranthesis out didn't break anything
         s8_add = {"percent": list(range(4, 16)), "mg/kg": list(range(16, 26))}
         s8_merge = {"location and depth": ["Station", "Lab Sample ID", "Field ID"]}
         s8_col_expand = ["Analyte", "Units", "Value"]
@@ -1211,12 +1220,7 @@ def main():
         s9_file = "core_sample_results_data.csv"
         s9_val = list(range(7, 31))
         s9_add = {"mg/kg": list(range(7, 30)), "percent": [30]}
-        # TODO need percent sign
-        #TODO remove s9_add = {"mg/kg": list(range(7, 30))}
         s9_col_expand = ["Analyte", "Units", "Value"]
-        # TODO: check units applied to correct columns
-        # TODO: check split with flag
-
         study9 = ImportStudy(the_input=s9_file,
                              study_name="Core Sample Results",
                              study_year=2010, sample_type="Sediment",
