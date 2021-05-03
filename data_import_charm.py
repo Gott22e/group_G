@@ -6,20 +6,25 @@ Upper Columbia River Site database.
 Program is designed to be run from within the juyptr notebook "data_import.ipynb".
 (This is required for password management and tunneling.)
 
-Updated: 2021/04/30
+Updated: 2021/05/02
 
 For issues with this script, contact Allison Nau.
 """
 
 # to change permissions in linus: chmod -R 777
 
-# Booleans to specify what parts of the code to run:
-# In_pycharm used to suppress functionality that is not currently enabled:
-In_pycharm = True  # TODO fix
-In_jyptr = False  # TODO fix
+# Booleans to specify what parts of the code to run (only one of In_pycharm, In_jyptr, In_webiste, should be True):
+# If In_pycharm is True, will not connect with actual database
+# Juypter notebooks is used to get user passwords and connect with database. When code is pulled into Juypter notebooks,
+# specify In_jyptr as True (use data_import.ipynb to do so)
+# If using script through website, specify In_website as True
+In_pycharm = False
+In_jyptr = True
 In_website = False
 
-Partial_insert = False  # TODO fix
+# Create partial insert statements? (To save to text. Partial insert statement will be automatically made when necessary
+# when connected to database
+Partial_insert = False
 
 # Import tools from Mae Rose:
 import import_tools_MR as mr
@@ -30,8 +35,6 @@ if not In_website:
     import getpass
 import pandas as pd
 
-# TODO import detect_delimiter
-
 # Don't truncate columns:
 pd.set_option('display.max_columns', None)
 import pymysql
@@ -40,7 +43,6 @@ import os
 import math
 import numpy as np
 from io import StringIO
-# TODO import sqlalchemy
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
 
@@ -685,7 +687,7 @@ class ImportStudy(ImportTools):
         Combines sheets that were stored in study's excel data file, according to template.
         Also handles a single sheet IF data needs to be rearranged or modified.
         This should not be used if template is unknown.
-        TODO update doc to talk about special
+        (Special header files should already be combined into one dataframe prior to this step.)
         """
         template = self.use_template
         temp_table = None
@@ -714,13 +716,11 @@ class ImportStudy(ImportTools):
 
     def template1_clean(self):
         """
-        Cleans up studies that follow template1, and combines into one dataframe.
+        Cleans up studies that follow template1, template2, or template3 and combines into one dataframe.
         :return: one cleaned up pandas dataframe.
-        # TODO update documentation regarding template 2 & 3
         """
         # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
-        # TODO: manage these sheet names better! (maybe csv files should have drop down)
         if "labresults" in self.table:
             self.table["labresult"] = self.table.pop("labresults")
         if "lab results" in self.table:
@@ -773,6 +773,8 @@ class ImportStudy(ImportTools):
         for key in change_dict:
             if key in self.table:
                 self.table[change_dict[key]] = self.table.pop(key)
+        # Clean up analyte values
+        self.table["analyte"] = self.table["analyte"].str.replace("Total Organic Carbon", "Carbon_org", regex=False)
         # Break apart sample depth column:
         if "sample_depth_range_in_inches_from_surface" in self.table:
             temp = pd.DataFrame(self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
@@ -791,11 +793,13 @@ class ImportStudy(ImportTools):
         # Handle cells that should be empty but instead have "--"
         self.table.loc[self.table["meas_value"] == "--", "meas_value"] = ""
         self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
-        #TODO self.table.to_csv("temp.csv")
         return self.table
 
     def template5_clean(self):
-        # TODO
+        """
+        Cleans up studies that follow template 5.
+        :return: cleaned up dataframe. This dataframe is already stored in self.table.
+        """
         # Change column names:
         change_dict = {"date_collected": "sample_date",
                         "top_depth": "upper_depth",
@@ -804,24 +808,27 @@ class ImportStudy(ImportTools):
                         "longitude": "x_coord",
                         "latitude": "y_coord",
                         "value": "meas_value"}
-        # TODO: pop this out as own method:
         for key in change_dict:
             if key in self.table:
                 self.table[change_dict[key]] = self.table.pop(key)
         # Clean analyte names
-        # TODO: pop this out as own method
         self.table["analyte"] = self.table["analyte"].str.replace(" (mg/kg)", "", regex=False)
         self.table["analyte"] = self.table["analyte"].str.replace(" (mg/Kg)", "", regex=False)
+        print(self.table["analyte"])
+        self.table["analyte"] = self.table["analyte"].str.replace("Total Organic\nCarbon (%)", "Carbon_org",
+                                                                  regex=False)
+        # Convert date column to date format:
+        self.table["sample_date"] = pd.to_datetime(self.table["sample_date"])
         # Break apart values with flags:
-        # TODO temp = pd.DataFrame(self.table["meas_value"].str.split(" ", n=1, expand=True))
         temp = pd.DataFrame(self.table["meas_value"].str.split(expand=True))
-        self.table["meas_value_temp"] = temp[0]   #TODO change back
+        self.table["meas_value_temp"] = temp[0]
         self.table["lab_flags"] = temp[1]
         self.table["meas_value_temp"].fillna(self.table["meas_value"], inplace=True)
         self.table["meas_value"] = self.table["meas_value_temp"]
         self.table.drop(columns=["meas_value_temp"], inplace=True)
-        #TODO put back self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
-        self.table.to_csv("temp3.csv")  # TODO remove
+        self.table["meas_value"] = pd.to_numeric(self.table["meas_value"])
+        # Drop rows without meas_value:
+        self.table.dropna(subset=["sample_id", "meas_value"], inplace=True, how="all")
         return self.table
 
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
@@ -1102,18 +1109,16 @@ def main():
     Main function to run to run entire program.
     """
     # More booleans to specify which part of code to run
-    import_study1 = False  # Phase 1 sediment
-    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-    import_study3 = False  # UCR_2010_BeachSD
-    import_study4 = False  # UCR_2011_BeachSD
-    import_study5 = False  # Phase 2 Sediment Teck Data
-    import_study6 = False  # Bossburg
-    import_study7 = False  # Phase 3 sediment
-    import_study8 = False  # Phase 2 Sediment Trustee Data
+    import_study1 = True  # Phase 1 sediment
+    import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = True  # UCR_2010_BeachSD
+    import_study4 = True  # UCR_2011_BeachSD
+    import_study5 = True  # Phase 2 Sediment Teck Data
+    import_study6 = True  # Bossburg
+    import_study7 = True  # Phase 3 sediment
+    import_study8 = True  # Phase 2 Sediment Trustee Data
     import_study9 = True  # Core Sample Results
-    create_new_table = False  # Cannot be used when it website
-    # TODO: currently works: study1, study4, study5, study6, study7
-    # TODO: do insert statement check before actually inserting
+    create_new_table = True  # Cannot be used when it website
     # Grab global variable:
     global Tunnel
     global Bioed_pw
@@ -1187,7 +1192,7 @@ def main():
                     "location and depth": "phase2_sediment_trustee_location_v2.csv"}
         s8_val = list(range(4, 26))
         # TODO: check that taking paranthesis out didn't break anything
-        s8_add = {"%": list(range(4, 16)), "mg/kg": list(range(16, 26))}
+        s8_add = {"percent": list(range(4, 16)), "mg/kg": list(range(16, 26))}
         s8_merge = {"location and depth": ["Station", "Lab Sample ID", "Field ID"]}
         s8_col_expand = ["Analyte", "Units", "Value"]
         study8 = ImportStudy(the_input=s8_files,
@@ -1205,7 +1210,7 @@ def main():
         print("Importing study 9 (Core Sample Results)")
         s9_file = "core_sample_results_data.csv"
         s9_val = list(range(7, 31))
-        s9_add = {"mg/kg": list(range(7, 30)), "%": [30]}
+        s9_add = {"mg/kg": list(range(7, 30)), "percent": [30]}
         # TODO need percent sign
         #TODO remove s9_add = {"mg/kg": list(range(7, 30))}
         s9_col_expand = ["Analyte", "Units", "Value"]
