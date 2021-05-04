@@ -5,8 +5,12 @@ Upper Columbia River Site database.
 
 Program is designed to be run from within the juyptr notebook "data_import.ipynb".
 (This is required for password management and tunneling.)
+To run within juyptr, specify In_jyptr = True
 
-Updated: 2021/05/02
+Program can also be run from within website, and will use the credentials "test" "test". If run in website,
+will accept dictionary of strings as input for studies without excel formatted (combined cell) headers.
+
+Updated: 2021/05/04
 
 For issues with this script, contact Allison Nau.
 """
@@ -18,8 +22,8 @@ For issues with this script, contact Allison Nau.
 # Juypter notebooks is used to get user passwords and connect with database. When code is pulled into Juypter notebooks,
 # specify In_jyptr as True (use data_import.ipynb to do so)
 # If using script through website, specify In_website as True
-In_pycharm = True
-In_jyptr = False
+In_pycharm = False
+In_jyptr = True
 In_website = False
 
 # Create partial insert statements? (To save to text. Partial insert statement will be automatically made when necessary
@@ -249,6 +253,7 @@ class ImportTools:
                                  'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station', "value_note"]
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
         # Added indices:
+        #TODO self.table_index = {"analyte_idx": "analyte"}
         self.table_index = {"analyte_idx": "analyte", "date_idx": "sample_date"}
 
     @staticmethod
@@ -433,36 +438,38 @@ class ImportTools:
 
     def create_index_statement(self):
         """
-        Returns mySQL statement (string) that creates indices in self.table_index, if the index does not already exist.
-        :return: string representing above query.
+        Returns mySQL statement(s) that creates indices in self.table_index, if the index does not already exist.
+        :return: list of strings representing above queries.
         """
-        statement = ""
+        statements = []
         for idx, con in self.table_index.items():
-            statement += f"alter table {self.table_name} add index if not exists {idx} ({con}); \n"
+            # Back ticks  necessary for remote execution
+            statements.append(f"alter table {self.table_name} add index if not exists {idx} ({con}); \n")
         if not In_website:
-            print("Create Index statement:")
-            print(statement)
-        return statement
+            print("Create Index statements:")
+            print(statements)
+        return statements
 
     def create_drop_index_statement(self):
         """
-        Returns mySQL statement (string) that drops indices in self.table_index, if the index exists.
-        :return: string representing above query.
+        Returns mySQL statement(s) (string) that drops indices in self.table_index, if the index exists.
+        :return: list of strings representing above queries.
         """
-        statement = ""
+        statements = []
         for idx, con in self.table_index.items():
-            statement += f"alter table {self.table_name} drop index if exists {idx}; \n"
+            statements.append(f"alter table {self.table_name} drop index if exists {idx}; \n")
         if not In_website:
             print("Create drop index statement:")
-            print(statement)
-        return statement
+            print(statements)
+        return statements
 
     def create_table(self):
         """
         Creates data table in bioed. Will drop table if it already exists.
+        Note: this does not add indices in. That must be done after data is imported.
         """
         # Drop table if it already exists:
-        drop_existing = f"DROP TABLE IF EXISTS {self.table_name};"
+        drop_existing = f"DROP TABLE IF EXISTS {self.table_name}; \n"
         # Grab create statement:
         create_statement = self.create_statement()
         # If not within pycharm, execute queries:
@@ -962,8 +969,8 @@ class ImportStudy(ImportTools):
         TODO
         """
         # Get index statements:
-        create_statement = self.create_index_statement()
-        drop_statement = self.create_drop_index_statement()
+        create_statements = self.create_index_statement()
+        drop_statements = self.create_drop_index_statement()
         # If study template was found:
         if self.found_template:
             # If there are not missing columns in the master database table, go ahead and insert data:
@@ -978,7 +985,8 @@ class ImportStudy(ImportTools):
                 if In_jyptr or In_website:
                     # Drop indices:
                     if drop_index:
-                        self.execute_query(query=drop_statement)
+                        for statement in drop_statements:
+                            self.execute_query(query=statement)
                     # Run insertion:
                     if len(self.table.index) <= 5000:
                         self.execute_query(self.insert_statement)
@@ -989,7 +997,8 @@ class ImportStudy(ImportTools):
                             self.execute_query(query=query)
                     # Add indices back:
                     if replace_index:
-                        self.execute_query(query=create_statement)
+                        for statement in create_statements:
+                            self.execute_query(query=statement)
             # TODO: modify to raise error?
             # Save current known templates:
             if not In_website:
@@ -1213,13 +1222,13 @@ def main():
     """
     # More booleans to specify which part of code to run
     import_study1 = True  # Phase 1 sediment
-    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-    import_study3 = False  # UCR_2010_BeachSD
-    import_study4 = False  # UCR_2011_BeachSD
-    import_study5 = False  # Phase 2 Sediment Teck Data
-    import_study6 = True  # Bossburg
-    import_study7 = False  # Phase 3 sediment
-    import_study8 = False  # Phase 2 Sediment Trustee Data
+    import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = True  # UCR_2010_BeachSD
+    import_study4 = True  # UCR_2011_BeachSD
+    import_study5 = True  # Phase 2 Sediment Teck Data
+    import_study6 = True # Bossburg
+    import_study7 = True  # Phase 3 sediment
+    import_study8 = True  # Phase 2 Sediment Trustee Data
     import_study9 = True  # Core Sample Results
     create_new_table = True  # Cannot be used when it website
     # Grab global variable:
