@@ -18,8 +18,8 @@ For issues with this script, contact Allison Nau.
 # Juypter notebooks is used to get user passwords and connect with database. When code is pulled into Juypter notebooks,
 # specify In_jyptr as True (use data_import.ipynb to do so)
 # If using script through website, specify In_website as True
-In_pycharm = False
-In_jyptr = True
+In_pycharm = True
+In_jyptr = False
 In_website = False
 
 # Create partial insert statements? (To save to text. Partial insert statement will be automatically made when necessary
@@ -70,6 +70,10 @@ import xlrd
 
 # TODO Add INDEXES AT END OF SCRIPT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # TODO INDEXES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+# TODO: convert to cm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
 # Global variables:
 Tunnel = None
@@ -188,7 +192,9 @@ class ImportTools:
     Class contains tools for importing data tables into database.
     """
     # Variables to have in create table statement (in addition to our added variables):
-    full_list = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
+    # TODO: check geo reorder worked
+    full_list = ['study_name', 'study_year', 'sample_type',
+                 'study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
                  'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
                  'sum_sample_id', 'sample_id', 'sample_date', 'study_element',
                  'composite_type', 'taxon', 'sample_material', 'sample_description',
@@ -199,7 +205,9 @@ class ImportTools:
                  'detection_limit', 'reporting_limit', 'undetected', 'estimated',
                  'rejected', 'greater_than', 'tic', 'reportable', 'alias_id',
                  'nd_reported_to', 'qapp_deviation', 'nd_rationale', 'comments',
-                 'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'utm_x', 'utm_y', 'srid', 'srid_dup',
+                 'river_mile', 'river_mile_dup',
+                 'geo_cord_system', 'x_coord', 'y_coord',
+                 'utm_cord_system', 'utm_x', 'utm_y', 'srid', 'srid_dup',
                  'lat_WGS84_auto_calculated_only_for_mapping', 'lon_WGS84_auto_calculated_only_for_mapping',
                  'principal_doc_location', 'elevation', 'elev_unit', 'elevation_dup', 'elev_ft',
                  'reach', 'station']
@@ -216,7 +224,7 @@ class ImportTools:
         # Study templates:
         self.known_templates = KnownStudyTemplates()
         # Variable types:
-        self.int_variables = ['sig_figs', 'detection_limit', 'reporting_limit']
+        self.int_variables = ['study_year', 'sig_figs', 'detection_limit', 'reporting_limit']
         # TODO: have two different sizes of decimal values?
         self.decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
                                   'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
@@ -228,7 +236,8 @@ class ImportTools:
         # TODO is lab_rep OK as string?
         # TODO: booleans currently as strings: 'undetected', 'estimated',
         #        'rejected', 'greater_than', 'tic', 'reportable',
-        self.string_variables = ['study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
+        self.string_variables = ['study_name', 'sample_type', 'geo_cord_system', 'utm_cord_system',
+                                 'study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
                                  'labsample', 'analyte', 'full_name', 'principal_doc_location',
                                  'study_id', 'sample_no', 'sampcoll_id', 'sum_sample_id', 'sample_id', "study_element",
                                  'composite_type', 'taxon', 'sample_material', 'subsamp_type',
@@ -239,6 +248,8 @@ class ImportTools:
                                  'alias_id', "cas_rn", 'lab_rep',
                                  'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station', "value_note"]
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
+        # Added indices:
+        self.table_index = {"analyte_idx": "analyte", "date_idx": "sample_date"}
 
     @staticmethod
     def read_in_csv(filename, sep=","):
@@ -386,15 +397,15 @@ class ImportTools:
         # Initialize create table string:
         create_string = f"CREATE TABLE {self.table_name} ( \n"
         create_string += "anid int NOT NULL AUTO_INCREMENT, \n"
-        create_string += "study_name VARCHAR(200), \n"
-        create_string += "study_year int, \n"
-        create_string += "sample_type VARCHAR(200), \n"
-        create_string += "geo_cord_system VARCHAR(100), \n"
-        create_string += "utm_cord_system VARCHAR(100), \n"
+        #TODO remove create_string += "study_name VARCHAR(200), \n"
+        #TODO remove create_string += "study_year int, \n"
+        #TODO remove create_string += "sample_type VARCHAR(200), \n"
+        #TODO remove create_string += "geo_cord_system VARCHAR(100), \n"
+        #TODO remove create_string += "utm_cord_system VARCHAR(100), \n"
         # Save file names as a text file:
         with open("column_names.txt", 'w') as my_file:
-            for temp in self.our_added_vars:
-                my_file.write(f"{temp}\n")
+            #TODO remove for temp in self.our_added_vars:
+            #TODO remove     my_file.write(f"{temp}\n")
             for temp in ImportTools.full_list:
                 my_file.write(f"{temp}\n")
         # Loop for variables to add (done this way to preserve order)
@@ -419,6 +430,32 @@ class ImportTools:
         create_string += ") ENGINE = INNODB;"
         # Return create table string:
         return create_string
+
+    def create_index_statement(self):
+        """
+        Returns mySQL statement (string) that creates indices in self.table_index, if the index does not already exist.
+        :return: string representing above query.
+        """
+        statement = ""
+        for idx, con in self.table_index.items():
+            statement += f"alter table {self.table_name} add index if not exists {idx} ({con}); \n"
+        if not In_website:
+            print("Create Index statement:")
+            print(statement)
+        return statement
+
+    def create_drop_index_statement(self):
+        """
+        Returns mySQL statement (string) that drops indices in self.table_index, if the index exists.
+        :return: string representing above query.
+        """
+        statement = ""
+        for idx, con in self.table_index.items():
+            statement += f"alter table {self.table_name} drop index if exists {idx}; \n"
+        if not In_website:
+            print("Create drop index statement:")
+            print(statement)
+        return statement
 
     def create_table(self):
         """
@@ -490,6 +527,44 @@ class ImportTools:
             new_col = new_col.strip("_")
             new_names.append(new_col)
         return new_names
+
+    @staticmethod
+    def convert_to_cm(df, cols=["upper_depth", "lower_depth"], unit_col="depth_units"):
+        """
+        Converts units (in, m, ft) to cm.
+        :param df: dataframe to be converted
+        :param cols: list of columns of numerical values to change, should all use the same units.
+        :param unit_col: column containing units value.
+        :return: dataframe with units converted.
+        """
+        # TODO
+        # TODO make lower case units
+        # Make units column lower case and stripped of leading and trailing white space:
+        df[unit_col] = df[unit_col].str.lower()
+        df[unit_col] = df[unit_col].str.strip()
+        # Equivalency dictionary:
+        equivalent = {"inches": "in", "inch": "in",
+                      "centimeter": "cm", "centimeters": "cm",
+                      "meter": "m", "meters": "m",
+                      "feet": "ft", "foot": "ft"}
+        # Conversion dictionary:
+        convert_cm = {"cm": 1,
+                      "m": 1 / 100,
+                      "in": 2.54,
+                      "ft": 30.48}
+        for i in df.index:
+            #TODO remove if df[unit_col][i] in equivalent:
+            #TODO remove     df[unit_col][i] = equivalent[df[unit_col][i]]
+            #TODO remove if df[unit_col][i] in convert_cm:
+            #TODO remove     for col in cols:
+            #TODO remove         df[col][i] = df[col][i]/convert_cm[df[unit_col][i]]
+            if df.loc[i, unit_col] in equivalent:
+                df.loc[i, unit_col] = equivalent[df.loc[i, unit_col]]
+            if df.loc[i, unit_col] in convert_cm:
+                for col in cols:
+                    df.loc[i, col] = df.loc[i, col] * convert_cm[df.loc[i, unit_col]]
+                df.loc[i, unit_col] = "cm"
+        return df
 
 
 class ImportStudy(ImportTools):
@@ -578,6 +653,8 @@ class ImportStudy(ImportTools):
             # If study was an excel file, combine into one table, according to template in self.use_template
             if not isinstance(self.table, pd.DataFrame) or self.special_header:  # TODO working properly?
                 self.combine_sheets_rearranges()
+            # Convert units:
+            self.table = ImportTools.convert_to_cm(self.table)
             # If template was found, go ahead and add columns with the study info:
             if self.use_template is not None:
                 self.finish_building_table()  # Finish building table, including added columns with study info
@@ -606,8 +683,8 @@ class ImportStudy(ImportTools):
             # TODO handle non-csvs seps?
             table.columns = self.clean_col_names(table)
             self.col_names_by_sheet["sheet1"] = table.columns
-            print(table.head(n=5))  # TODO remove
-            table.to_csv("temp2.csv")
+            #TODO print(table.head(n=5))  # TODO remove
+            #TODO table.to_csv("temp2.csv")
         # If input in a csv:
         elif self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename, sep=self.sep)
@@ -646,7 +723,11 @@ class ImportStudy(ImportTools):
         return table
 
     def read_in_special_csv(self):
-        # TODO
+        """
+        Reads in a single csv, when the header has special requirements (i.e. analytes are arranged by
+        column.)
+        :return: dataframe containing data stored in csv file.
+        """
         temp = mr.allisort(fileIn=self.the_input,
                            keys=self.special_col_names_expand,
                            values=self.special_cols_with_values,
@@ -782,7 +863,8 @@ class ImportStudy(ImportTools):
         self.table["analyte"] = self.table["analyte"].str.replace("Total Organic Carbon", "Carbon_org", regex=False)
         # Break apart sample depth column:
         if "sample_depth_range_in_inches_from_surface" in self.table:
-            temp = pd.DataFrame(self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
+            temp = pd.DataFrame(
+                self.table["sample_depth_range_in_inches_from_surface"].str.split("-", n=1, expand=True))
             self.table["upper_depth"] = temp[0]
             self.table["lower_depth"] = temp[1]
             self.table.drop(columns=["sample_depth_range_in_inches_from_surface"], inplace=True)
@@ -812,12 +894,12 @@ class ImportStudy(ImportTools):
         """
         # Change column names:
         change_dict = {"date_collected": "sample_date",
-                        "top_depth": "upper_depth",
-                        "bottom_depth": "lower_depth",
-                        "dept_unit": "depth_units",
-                        "longitude": "x_coord",
-                        "latitude": "y_coord",
-                        "value": "meas_value"}
+                       "top_depth": "upper_depth",
+                       "bottom_depth": "lower_depth",
+                       "dept_unit": "depth_units",
+                       "longitude": "x_coord",
+                       "latitude": "y_coord",
+                       "value": "meas_value"}
         for key in change_dict:
             if key in self.table:
                 self.table[change_dict[key]] = self.table.pop(key)
@@ -874,10 +956,14 @@ class ImportStudy(ImportTools):
         print("Column names after table built:")
         print(self.table.columns)
 
-    def run_import(self):
+    def run_import(self, drop_index=True, replace_index=True):
         """
         Runs import of current data table.
+        TODO
         """
+        # Get index statements:
+        create_statement = self.create_index_statement()
+        drop_statement = self.create_drop_index_statement()
         # If study template was found:
         if self.found_template:
             # If there are not missing columns in the master database table, go ahead and insert data:
@@ -890,6 +976,10 @@ class ImportStudy(ImportTools):
                 global Tunnel
                 # Connect with database and execute insert statement:
                 if In_jyptr or In_website:
+                    # Drop indices:
+                    if drop_index:
+                        self.execute_query(query=drop_statement)
+                    # Run insertion:
                     if len(self.table.index) <= 5000:
                         self.execute_query(self.insert_statement)
                     else:
@@ -897,6 +987,9 @@ class ImportStudy(ImportTools):
                                                                                  perfile=2000)
                         for query in smaller_statements:
                             self.execute_query(query=query)
+                    # Add indices back:
+                    if replace_index:
+                        self.execute_query(query=create_statement)
             # TODO: modify to raise error?
             # Save current known templates:
             if not In_website:
@@ -1120,13 +1213,13 @@ def main():
     """
     # More booleans to specify which part of code to run
     import_study1 = True  # Phase 1 sediment
-    import_study2 = True  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
-    import_study3 = True  # UCR_2010_BeachSD
-    import_study4 = True  # UCR_2011_BeachSD
-    import_study5 = True  # Phase 2 Sediment Teck Data
+    import_study2 = False  # UCR_2009_BeachSD # TODO: location ID key stopped working for combine
+    import_study3 = False  # UCR_2010_BeachSD
+    import_study4 = False  # UCR_2011_BeachSD
+    import_study5 = False  # Phase 2 Sediment Teck Data
     import_study6 = True  # Bossburg
-    import_study7 = True  # Phase 3 sediment
-    import_study8 = True # Phase 2 Sediment Trustee Data
+    import_study7 = False  # Phase 3 sediment
+    import_study8 = False  # Phase 2 Sediment Trustee Data
     import_study9 = True  # Core Sample Results
     create_new_table = True  # Cannot be used when it website
     # Grab global variable:
