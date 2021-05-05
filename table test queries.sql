@@ -11,10 +11,26 @@ lab_rep NOT IN ('2', '3', '4', 'BIO2', 'CONFRM', 'RE2') and
 material_analyzed not in ('RinseWater', 'Blank-Filteration', 'Porewater') and 
 study_element != 'QC'
 
+-- Testing insertion
+select *
+from cr_3
+where study_name like "%Testing%"
+
+
+select *, count(*)
+from cr_3
+where study_name like "%Testing%"
+group by study_name
+
 -- Getting Analyte names
 select distinct analyte
 from cr
 order by analyte
+
+-- to check sand, gravel, silt:
+select distinct analyte
+from cr
+where analyte regexp 'sand|silt|gravel'
 
 -- Getting Analyte names (and at least one study associated with it so you can see it)
 select analyte, full_name, count(*), study_name
@@ -66,3 +82,23 @@ group by study_name, analyte, units
 select *
 from cr
 where study_name="Core Sample Results"
+
+-- Units for sediment:
+select study_name, depth_units
+from cr
+group by study_name, depth_units
+
+-- Index play:
+`alter` table cr add index if not exists analyte_idx (analyte); 
+`alter` table cr add index if not exists date_idx (sample_date); 
+alter table cr add index if not exists analyte_idx (analyte); 
+alter table cr add index if not exists date_idx (sample_date); 
+-- Create drop index statement:
+`alter` table cr drop index if exists analyte_idx; 
+alter table cr drop index if exists date_idx; 
+-- TODO: if EXISTS!!!
+
+-- Playing with graphics
+select analyte, meas_value, river_mile
+from cr_2
+where river_mile is not Null and analyte = "Lead"

@@ -1,0 +1,146 @@
+#!/usr/local/Python-3.7/bin/python
+import pymysql
+import sys
+import cgi
+import pandas as pd
+
+import cgitb
+cgitb.enable()
+
+# print content-type
+print("Content-type: text/html\n")
+
+print("<html><head>")
+print("<title>Upper Columbia River Site Database</title>") 
+
+print('''<style>
+<script src="https://code.jquery.com/jquery-3.4.1.js"></script>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.topnav {
+  overflow: hidden;
+  background-color: #20b2aa;
+}
+
+.topnav a {
+  float: left;
+  color: white;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.topnav a:hover {
+  background-color: #8fbc8f ;
+  color: white;
+}
+
+.topnav a.active {
+  background-color: #00aaff;
+  color: white;
+}
+body {margin:30;padding:30}
+
+table, td, th {
+  border: 1px solid black;
+  text-align: center;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+</style>
+</head>''')
+print("</head>")
+print("<body>")
+
+print('''<h1 align="center"> Upper Columbia River Site Database </h1>''')
+
+print('''
+ <div class="topnav">
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/intro">Introduction</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/home">Home</a>
+  <a class="active" href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/upload">Upload</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/help">Help Page</a>
+</div> 
+''')
+
+print("<h1>Add  Database</h1>")
+print('''<form name="Columbia River DB" action="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/upload" method="POST" >
+	Study Name: <input type="text" placeholder="Phase_7_Sediment" id = "study name" name="study name" value =""/>
+	Study Year: <input type="number" placeholder="2013" id="study year" name="study year"  value="" step="1"/>
+	X_Coord Y_Coord: <input type="text" placeholder="WGS84" id="xy coord" name="xy coord" value="" step="any"/>
+	Utm_x Utm_y: <input type="text" placeholder="NAD83 UTM Zone 11U" id="utm coord" name= "utm coord" value="" step="any"/>
+	<br> Paste Lab Results:<br> <textarea name="uploaded" id = "uploaded" rows = "20" cols = "150" /></textarea>
+	<input type="submit" value="Submit">
+	<br> Paste Locations(Optional):<br> <textarea name="uploaded2" id = "uploaded2" rows = "20" cols = "150" /></textarea>
+	</form>''')
+
+#get forms
+form = cgi.FieldStorage()
+study_name = form.getvalue("study name")
+study_year = form.getvalue("study year")
+xy_coord = form.getvalue("xy coord")
+utm_coord = form.getvalue("utm coord")
+file = form.getvalue("uploaded")
+file2 = form.getvalue("uploaded2")
+
+#if file:
+#	for st in file:
+#		print(st)
+#	#print("<br>%s")%(file)
+#
+#if file2:
+#	pass
+#	#print("<br>%s")%(file2)
+
+
+# module load python
+
+if file and file2:
+    from data_import_charm import *
+    dict_of_strings = {}
+    dict_of_strings["labresults"] = file
+    dict_of_strings["locations"] = file2
+
+    print(dict_of_strings)
+
+    string_study = ImportStudy(the_input=dict_of_strings, study_name=study_name, study_year=study_year,
+                               sample_type="Sediment", geo_cord_system=xy_coord, utm_cord_system=utm_coord,
+                               is_dict_strings=True)
+    string_study.run_import()
+
+#print(type(file))
+#print(type(file2))
+
+
+#study1 = ImportStudy(the_file="Phase 1 Sediment.csv", study_name="Test1", study_year=2005,
+#                     sample_type="Sediment",
+#                     geo_cord_system="unknown_A1", utm_cord_system="unknown_A2")
+#study1.run_import()
+
+#connection = pymysql.connect(user="test",password="test",db="group_G",port=4253)
+#c = connection.cursor()
+#execute statement
+#c.exceute(insert query variable)
+#commit changes
+#connection.commit()
+#do we want to print the inserted information?
+
+#c.close()
+#connection.close()
+print("""
+<script type="text/javascript">
+  document.getElementById("uploaded").onchange = function() {
+      // submitting the form
+      document.getElementById("uploaded").submit();
+  };
+</script>
+
+""")
+print("</body></html>")

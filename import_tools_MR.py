@@ -1,3 +1,5 @@
+#!/usr/local/Python-3.7/bin/python
+
 # Written by Mae Rose Gott
 # (Small modifications from Allison Nau)
 
