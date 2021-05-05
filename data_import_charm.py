@@ -17,14 +17,14 @@ For issues with this script, contact Allison Nau.
 
 # to change permissions in linus: chmod -R 777
 
-# Booleans to specify what parts of the code to run (only one of In_pycharm, In_jyptr, In_webiste, should be True):
+# Booleans to specify what parts of the code to run (only one of In_pycharm, In_jyptr, In_website, should be True):
 # If In_pycharm is True, will not connect with actual database
 # Juypter notebooks is used to get user passwords and connect with database. When code is pulled into Juypter notebooks,
 # specify In_jyptr as True (use data_import.ipynb to do so)
 # If using script through website, specify In_website as True
 In_pycharm = False
 In_jyptr = True
-In_website = False
+In_website = False  # TODO
 
 # Create partial insert statements? (To save to text. Partial insert statement will be automatically made when necessary
 # when connected to database
@@ -50,60 +50,19 @@ from io import StringIO
 # Requires xlrd, openpyxl for pandas excel support:
 import xlrd
 
-# TODO import openpyxl
 
-# TODO: check all metal names are consistent in table, and we don't have some random weird ones
-
-# TODO: Fix where duplicated columns go if one is entirely NULLS
-# TODO: (See: river_mile_dup in Phase 2 Sediment Teck data)
-# TODO: maybe drop empty columns... or iterate through
-
-# TODO: confirm that the number of rows inserted match the dataset
-
-# TODO deal with NaN, None, Null, etc.
-# TODO handle "_dup" pseudo duplicated columns
-# TODO: count rows for each study is correct
-# TODO: see if rinse blanks made it in
-# TODO: "UserWarning: Cannot parse header or footer so it will be ignored
+# Some excel files will have:
+# "UserWarning: Cannot parse header or footer so it will be ignored
 #   warn("""Cannot parse header or footer so it will be ignored""")"
-# TODO: determine what are private methods and change
-
-# TODO row count to make sure everything is there
-# TODO compare insert string between juyptr and pycharm
-# TODO error catching when insert statements don't work (including: when field is too long for database)
-
-# TODO Add INDEXES AT END OF SCRIPT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# TODO INDEXES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-# TODO: convert to cm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 # Global variables:
 Tunnel = None
 Username = "anau"
 Bioed_pw = None
-Table_to_use = "cr"  # TODO change
-
-
-# TODO fix alignment for certain studies
-# TODO: add column names in
-
-
-class NoKnownTemplate(Exception):
-    """
-    Raised when data file structure is not recognized.
-    """
-    # TODO: enable this!!! (Instead of the print statments)
-    pass
-
-
-class DatatypeError(Exception):
-    """
-    Raised when there is a data of the wrong type within a column that has been uploaded to be imported.
-    """
-    # TODO enable this!!! (Instead of print statements)
-    pass
+Table_to_use = "cr"  # Main table
+if In_website:
+    Table_to_use = "cr_3"  # Copy of table OK to mess with
 
 
 class KnownStudyTemplates:
@@ -168,27 +127,14 @@ class KnownStudyTemplates:
               'analyte', 'units', 'value']]
         ]
         # TODO: generalize template 1 and 2 and 3 together
-        print(f"Length of study templates: {len(self.templates)}")  # TODO remove
+        if not In_website:
+            print(f"Length of study templates: {len(self.templates)}")
         # Dictionary of studies and what template to use:
         self.study_temps = {}
         # If study saved templates have been made:
         if os.path.exists("saved_templates"):
             temp = pickle.load(open("saved_templates", "rb"))
             self.study_temps = temp.study_temps
-        # TODO expand functionality to handle other KnownStudyTemplate variables
-
-    def mod_temps(self):
-        # TODO
-        self.save_temps()
-        pass
-
-    def save_temps(self):
-        # TODO
-        pass
-
-    def load_temps(self):
-        # TODO
-        pass
 
 
 class ImportTools:
@@ -196,7 +142,6 @@ class ImportTools:
     Class contains tools for importing data tables into database.
     """
     # Variables to have in create table statement (in addition to our added variables):
-    # TODO: check geo reorder worked
     full_list = ['study_name', 'study_year', 'sample_type',
                  'study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg',
                  'anal_type', 'labsample', 'study_id', 'sample_no', 'sampcoll_id',
@@ -229,17 +174,11 @@ class ImportTools:
         self.known_templates = KnownStudyTemplates()
         # Variable types:
         self.int_variables = ['study_year', 'sig_figs', 'detection_limit', 'reporting_limit']
-        # TODO: have two different sizes of decimal values?
         self.decimal_variables = ['upper_depth', 'lower_depth', 'original_lab_result', 'meas_value',
                                   'river_mile', 'river_mile_dup', 'x_coord', 'y_coord', 'srid', 'srid_dup',
                                   'utm_x', 'utm_y', 'lat_WGS84_auto_calculated_only_for_mapping',
                                   'lon_WGS84_auto_calculated_only_for_mapping', 'elev_ft', 'elevation', 'elevation_dup']
         self.date_variables = ['sample_date']
-        # TODO: is lab_conc_qual really string?
-        # TODO: is cas_rn OK as a string?
-        # TODO is lab_rep OK as string?
-        # TODO: booleans currently as strings: 'undetected', 'estimated',
-        #        'rejected', 'greater_than', 'tic', 'reportable',
         self.string_variables = ['study_name', 'sample_type', 'geo_cord_system', 'utm_cord_system',
                                  'study_loc_id', 'principal_doc', 'location_id', 'lab', 'lab_pkg', 'anal_type',
                                  'labsample', 'analyte', 'full_name', 'principal_doc_location',
@@ -253,7 +192,6 @@ class ImportTools:
                                  'qapp_deviation', 'nd_reported_to', 'elev_unit', 'reach', 'station', "value_note"]
         self.string_variables_long = ['comments', 'sample_description', 'nd_rationale']
         # Added indices:
-        #TODO self.table_index = {"analyte_idx": "analyte"}
         self.table_index = {"analyte_idx": "analyte", "date_idx": "sample_date"}
 
     @staticmethod
@@ -269,11 +207,9 @@ class ImportTools:
         temp_table_v1 = pd.read_csv(filename, sep=sep, header=1)
         header_v1 = set(temp_table_v1.columns)
         intersection_v1 = header_v1.intersection(ImportTools.full_list)
-        print(intersection_v1)
         temp_table_v2 = pd.read_csv(filename, sep=sep, header=0)
         header_v2 = set(temp_table_v2.columns)
         intersection_v2 = header_v2.intersection(ImportTools.full_list)
-        print(intersection_v2)
         if len(intersection_v1) > 1:
             temp_table = temp_table_v1
         elif len(intersection_v2) > 1:
@@ -281,7 +217,7 @@ class ImportTools:
         else:
             print("Can't identify row column names are in")
             temp_table = None
-        temp_table.drop_duplicates(inplace=True)  # TODO: does this work properly?
+        temp_table.drop_duplicates(inplace=True)
         return temp_table
 
     @staticmethod
@@ -309,7 +245,7 @@ class ImportTools:
                     print("File name extension is not recognized")
             else:
                 print(f"Skipping sheet: {sheet}")
-        # Drop duplicate rows:  # TODO Does this work well enough?
+        # Drop duplicate rows:
         for sheet in table_dict:
             table_dict[sheet].drop_duplicates(inplace=True)
         return table_dict
@@ -324,7 +260,7 @@ class ImportTools:
         :param sep: delimiter used in csv file. Default "," .
         :return: dictionary of pandas dataframes.
         """
-        # TODO: make sample_type enum?
+
         table_dict = {}
         for sheet, filename in my_dict.items():
             if sheet != "SQL used" and sheet != "history" and \
@@ -333,7 +269,7 @@ class ImportTools:
                 table_dict[sheet] = ImportTools.read_in_csv(filename, sep=sep)
             else:
                 print(f"Skipping sheet: {sheet}")
-        # Drop duplicate rows:  # TODO Does this work well enough?
+        # Drop duplicate rows:
         for sheet in table_dict:
             table_dict[sheet].drop_duplicates(inplace=True)
         return table_dict
@@ -357,7 +293,7 @@ class ImportTools:
                 table_dict[sheet] = pd.read_csv(my_string)
             else:
                 print(f"Skipping sheet: {sheet}")
-        # Drop duplicate rows:  # TODO Does this work well enough?
+        # Drop duplicate rows:
         for sheet in table_dict:
             table_dict[sheet].drop_duplicates(inplace=True)
         return table_dict
@@ -369,7 +305,6 @@ class ImportTools:
         :param query: string containing mySQL query to be executed.
         """
         # TODO: handle error catching, including when columns contain values that are too long or are the wrong type
-        # TODO: probably needs to be a return error statement?
         # If not running within pycharm:
         if not In_pycharm:
             # create the connection to the mysql database
@@ -402,17 +337,11 @@ class ImportTools:
         # Initialize create table string:
         create_string = f"CREATE TABLE {self.table_name} ( \n"
         create_string += "anid int NOT NULL AUTO_INCREMENT, \n"
-        #TODO remove create_string += "study_name VARCHAR(200), \n"
-        #TODO remove create_string += "study_year int, \n"
-        #TODO remove create_string += "sample_type VARCHAR(200), \n"
-        #TODO remove create_string += "geo_cord_system VARCHAR(100), \n"
-        #TODO remove create_string += "utm_cord_system VARCHAR(100), \n"
-        # Save file names as a text file:
-        with open("column_names.txt", 'w') as my_file:
-            #TODO remove for temp in self.our_added_vars:
-            #TODO remove     my_file.write(f"{temp}\n")
-            for temp in ImportTools.full_list:
-                my_file.write(f"{temp}\n")
+        # Save file column names as a text file:
+        if not In_website:
+            with open("column_names.txt", 'w') as my_file:
+                for temp in ImportTools.full_list:
+                    my_file.write(f"{temp}\n")
         # Loop for variables to add (done this way to preserve order)
         for temp in ImportTools.full_list:
             create_string += f"{temp} "
@@ -425,7 +354,6 @@ class ImportTools:
             elif temp in self.date_variables:
                 create_string += f"DATETIME"
             elif temp in self.string_variables_long:
-                # TODO is this really best way to do this for comments?
                 create_string += "VARCHAR(1000)"
             else:
                 print(f"Error: variable missing from data type lists: {temp}")
@@ -476,8 +404,9 @@ class ImportTools:
         if not In_pycharm:
             ImportTools.execute_query(drop_existing)
             ImportTools.execute_query(create_statement)
-        print("Create table statement:")
-        print(create_statement)
+        if not In_website:
+            print("Create table statement:")
+            print(create_statement)
         with open("create_table.txt", "w") as my_file:
             my_file.write(create_statement)
 
@@ -536,17 +465,20 @@ class ImportTools:
         return new_names
 
     @staticmethod
-    def convert_to_cm(df, cols=["upper_depth", "lower_depth"], unit_col="depth_units"):
+    def convert_to_cm(df, cols=None, unit_col="depth_units"):
         """
         Converts units (in, m, ft) to cm.
         :param df: dataframe to be converted
-        :param cols: list of columns of numerical values to change, should all use the same units.
+        :param cols: list of columns of numerical values to change, should all use the same units. If none, will use
+        ["upper_depth, "lower_depth]
         :param unit_col: column containing units value.
         :return: dataframe with units converted.
         """
-        # TODO
-        # TODO make lower case units
+        # Convert units column to string
+        df[unit_col] = df[unit_col].astype(str)
         # Make units column lower case and stripped of leading and trailing white space:
+        if cols is None:
+            cols = ["upper_depth", "lower_depth"]
         df[unit_col] = df[unit_col].str.lower()
         df[unit_col] = df[unit_col].str.strip()
         # Equivalency dictionary:
@@ -560,13 +492,10 @@ class ImportTools:
                       "in": 2.54,
                       "ft": 30.48}
         for i in df.index:
-            #TODO remove if df[unit_col][i] in equivalent:
-            #TODO remove     df[unit_col][i] = equivalent[df[unit_col][i]]
-            #TODO remove if df[unit_col][i] in convert_cm:
-            #TODO remove     for col in cols:
-            #TODO remove         df[col][i] = df[col][i]/convert_cm[df[unit_col][i]]
+            # Change units to a more recognizable format:
             if df.loc[i, unit_col] in equivalent:
                 df.loc[i, unit_col] = equivalent[df.loc[i, unit_col]]
+            # Do unit conversion:
             if df.loc[i, unit_col] in convert_cm:
                 for col in cols:
                     df.loc[i, col] = df.loc[i, col] * convert_cm[df.loc[i, unit_col]]
@@ -629,11 +558,11 @@ class ImportStudy(ImportTools):
             self.is_dict_strings = is_dict_strings
         else:
             self.is_dict_strings = True
-        # TODO: catch if all are False input types
         self.is_dict_filenames = is_dict_filenames
         self.sep = sep
         self.study_name = study_name
         self.study_year = study_year
+        # TODO: make sample_type enum
         self.sample_type = sample_type
         self.geo_cord_system = geo_cord_system
         self.utm_cord_system = utm_cord_system
@@ -658,7 +587,7 @@ class ImportStudy(ImportTools):
         self.compare_with_other_studies()
         if self.found_template:  # If template was found, proceed
             # If study was an excel file, combine into one table, according to template in self.use_template
-            if not isinstance(self.table, pd.DataFrame) or self.special_header:  # TODO working properly?
+            if not isinstance(self.table, pd.DataFrame) or self.special_header:
                 self.combine_sheets_rearranges()
             # Convert units:
             self.table = ImportTools.convert_to_cm(self.table)
@@ -678,6 +607,7 @@ class ImportStudy(ImportTools):
         text editor (i.e. a string representing a CSV file).
         :return: dataframe (csv) or list of dataframes (excel) containing study data.
         """
+        table = None
         # If there is a special header, and a dictionary of filenames was received:
         if self.special_header and self.is_dict_filenames:
             table = self.read_in_special_dict_filename()
@@ -687,15 +617,12 @@ class ImportStudy(ImportTools):
         # If there is a special header, and a csv was received:
         elif self.special_header and self.is_csv:
             table = self.read_in_special_csv()
-            # TODO handle non-csvs seps?
             table.columns = self.clean_col_names(table)
             self.col_names_by_sheet["sheet1"] = table.columns
-            #TODO print(table.head(n=5))  # TODO remove
-            #TODO table.to_csv("temp2.csv")
         # If input in a csv:
         elif self.is_csv:  # TODO: Template 0?
             table = ImportTools.read_in_csv(filename, sep=self.sep)
-            table.columns = self.clean_col_names(table)  # TODO: does this work for csv?
+            table.columns = self.clean_col_names(table)
             self.col_names_by_sheet["sheet1"] = table.columns
         # If input is an excel file:
         elif self.is_excel:
@@ -750,14 +677,16 @@ class ImportStudy(ImportTools):
         """
         new_merge_dict = {}
         table = None
+        # Determine sheets that are not-primary sheet to merge with:
         for key in self.special_merge_with:
             new_merge_dict[self.the_input[key]] = self.special_merge_with[key]
-            # TODO catch errors
+        # Determine primary sheet (will probably have all the analyte values in it)
         main_file = set(self.the_input) - set(self.special_merge_with)
         if len(main_file) != 1:
             print("Special Merge Requires that files in addition to the main file each be declared.")
             print("Main file should only be list in the input dictionary.")
         else:
+            # Get main filename:
             main_file = list(main_file)[0]
             main_file = self.the_input[main_file]
             temp = mr.allisort(fileIn=main_file,
@@ -765,6 +694,7 @@ class ImportStudy(ImportTools):
                                values=self.special_cols_with_values,
                                merge=new_merge_dict, add=self.special_add_units_to_cols)
             table = temp.DF
+            # Drop rows without a value:
             if "Value" in table.columns:
                 table.dropna(axis=0, subset=["Value"], inplace=True)
                 table.reset_index(drop=True)
@@ -798,6 +728,9 @@ class ImportStudy(ImportTools):
                 print("\tMissing columns:")
                 print(f"\t{miss_cols}")
         if temp_table is not None:  # If temp_table was successfully built
+            # Finish cleaning up analyte names:
+            temp_table = self.clean_analytes(df=temp_table)
+            # Print new columns:
             print("New columns:")
             print(temp_table.columns)
             self.table = temp_table
@@ -807,7 +740,6 @@ class ImportStudy(ImportTools):
         Cleans up studies that follow template1, template2, or template3 and combines into one dataframe.
         :return: one cleaned up pandas dataframe.
         """
-        # TODO: need to confirm this is OK renamed column for all studies of this template
         # Rename columms that are duplicated on different sheets, but are not being used as part of the join:
         if "labresults" in self.table:
             self.table["labresult"] = self.table.pop("labresults")
@@ -825,18 +757,16 @@ class ImportStudy(ImportTools):
         # Handle partially duplicated rows using:
         # https://www.geeksforgeeks.org/select-all-columns-except-one-given-column-in-a-pandas-dataframe/
         # https://stackoverflow.com/questions/36271413/pandas-merge-nearly-duplicate-rows-based-on-column-value/45088911
-        print(list(self.table["locations"].columns.values))
         group_by_cols = list(self.table["locations"].columns.values)
         if "principal_doc_location" in group_by_cols:
             # Make sure principal_doc_location is a string:
             self.table["locations"]["principal_doc_location"] = self.table["locations"][
                 "principal_doc_location"].astype(str)
             group_by_cols.remove("principal_doc_location")
-            # TODO: go back to group by all other columns:
+            # TODO: go back to group by all other columns (this statement isn't working right once additional studies were added):
             # TODO self.table["locations"] = self.table["locations"].groupby(group_by_cols)['principal_doc_location'].apply(', '.join).reset_index()
             self.table["locations"] = self.table["locations"].groupby(["location_id"])['principal_doc_location'].apply(
                 ', '.join).reset_index()
-        print(self.table["locations"].head(n=5))
         # Merge sheets:
         temp_table = pd.merge(self.table['labresult'], self.table['locations'], on=["location_id"], how="left")
         temp_table = self.clean_numeric_cols_of_nulls(temp_table)
@@ -913,7 +843,6 @@ class ImportStudy(ImportTools):
         # Clean analyte names
         self.table["analyte"] = self.table["analyte"].str.replace(" (mg/kg)", "", regex=False)
         self.table["analyte"] = self.table["analyte"].str.replace(" (mg/Kg)", "", regex=False)
-        print(self.table["analyte"])
         self.table["analyte"] = self.table["analyte"].str.replace("Total Organic\nCarbon (%)", "Carbon_org",
                                                                   regex=False)
         # Convert date column to date format:
@@ -930,6 +859,25 @@ class ImportStudy(ImportTools):
         self.table.dropna(subset=["sample_id", "meas_value"], inplace=True, how="all")
         return self.table
 
+    @staticmethod
+    def clean_analytes(df):
+        """
+        Takes pandas dataframe and converts specific analyte names into a more consistent format.
+        :param df: pandas dataframe.
+        :return: pandas dataframe.
+        """
+        convert_dict = {"Fine_Sand": "FineSand", "Sand, fine": "FineSand",
+                        "Med_Sand": "MedSand", "Sand, medium": "MedSand",
+                        "Sand, coarse": "CoarseSand",
+                        "Sand, very coarse": "VCoarseSand",
+                        "Sand, very fine": "VeryFineSand",
+                        "VFine_Gravel": "VFineGravel",
+                        "Fine_Gravel": "FineGravel",
+                        "Med_Gravel": "MedGravel"}
+        for key, value in convert_dict.items():
+            df.loc[df["analyte"] == key, "analyte"] = value
+        return df
+
     def clean_numeric_cols_of_nulls(self, df, missing="Unk"):
         """
         Removes string parameter "missing" from entries in dataframe "df", only from columns that are expected to
@@ -939,7 +887,6 @@ class ImportStudy(ImportTools):
         :param missing: string representing the value to be replaced.
         :return: cleaned dataframe.
         """
-        # TODO: do comparison in a way that isn't case sensitive?
         # Remove nulls in numerical columns:
         cols = self.int_variables + self.decimal_variables
         for col in cols:
@@ -947,7 +894,7 @@ class ImportStudy(ImportTools):
                 df[col].replace({missing: "Null"}, inplace=True)
             except KeyError:
                 print(f"No column named: {col}")
-            except TypeError:  # TODO check type of column rather than catch
+            except TypeError:
                 print(f"Can't make numeric to string comparison in numeric pandas column {col}")
         return df
 
@@ -966,7 +913,8 @@ class ImportStudy(ImportTools):
     def run_import(self, drop_index=True, replace_index=True):
         """
         Runs import of current data table.
-        TODO
+        :param drop_index: specifies if mySQL indices (non-primary) should be dropped before insertion, default True.
+        :param replace_index: specifies if mySQL indices (non-primary) should be added after insertion, default True.
         """
         # Get index statements:
         create_statements = self.create_index_statement()
@@ -978,7 +926,7 @@ class ImportStudy(ImportTools):
                 print("There are new columns, table columns must be modified before proceeding!!!!!")
             else:
                 # Make insert statement
-                master_statement = self.make_insert_statement()
+                self.make_insert_statement()
                 # Grab global variable:
                 global Tunnel
                 # Connect with database and execute insert statement:
@@ -991,15 +939,13 @@ class ImportStudy(ImportTools):
                     if len(self.table.index) <= 5000:
                         self.execute_query(self.insert_statement)
                     else:
-                        smaller_statements = self.make_smaller_insert_statements(master_statement=master_statement,
-                                                                                 perfile=2000)
+                        smaller_statements = self.make_smaller_insert_statements(perfile=2000)
                         for query in smaller_statements:
                             self.execute_query(query=query)
                     # Add indices back:
                     if replace_index:
                         for statement in create_statements:
                             self.execute_query(query=statement)
-            # TODO: modify to raise error?
             # Save current known templates:
             if not In_website:
                 pickle.dump(self.known_templates, open("saved_templates", "wb"))
@@ -1087,26 +1033,26 @@ class ImportStudy(ImportTools):
         :return: tuple (mixed_bool, list_of_mix). "mixed_bool" is True if there are mixed/string datatypes present
         (pandas object datatype). "list_of_mix" contains list of columns that contain pandas object datatypes.
         """
-        # Any mixed datatypes present?
-        # TODO (Strings also caught in this?)
+        # Any mixed datatypes present? (strings are also mixed databytes)
         mixed_bool = False
         list_of_mix = []
-        print("Datatypes in dataframe:")
+        if not In_website:
+            print("Datatypes in dataframe:")
         for (name, data) in df.iteritems():
-            print(f"Column Name: {name}")
+            if not In_website:
+                print(f"Column Name: {name}")
             my_dtype = df.dtypes[name]
-            print(f"Datatype: {my_dtype}")
+            if not In_website:
+                print(f"Datatype: {my_dtype}")
             if my_dtype == "object":
                 mixed_bool = True
                 list_of_mix.append(name)
-        print(f"Mixed column datatypes present in dataset: {mixed_bool}")
-        print(f"Columns with mixed datatypes present:")
-        print(list_of_mix)
-        # TODO: raise error with mismatches
+        if not In_website:
+            print(f"Mixed column datatypes present in dataset?: {mixed_bool}")
+            print(f"Columns with mixed datatypes present (or strings):")
+            print(list_of_mix)
         df.info()
         return mixed_bool, list_of_mix
-
-    # TODO: finish implementing this column type function
 
     def make_insert_statement(self, save_to=None):
         """
@@ -1144,7 +1090,6 @@ class ImportStudy(ImportTools):
         insert_string += ";"
         self.insert_statement = insert_string
         # Save insert statement to file:
-        # TODO: Does this append or overwrite in juyptr?
         if not In_website:
             with open(save_to, "w") as my_file:
                 my_file.write(self.insert_statement)
@@ -1152,15 +1097,13 @@ class ImportStudy(ImportTools):
                 self.make_smaller_insert_statements(save_to)
         return save_to
 
-    def make_smaller_insert_statements(self, master_statement, perfile=1000):
+    def make_smaller_insert_statements(self, perfile=1000):
         """
         Function makes smaller insert statements within text files for use in testing (only if In_website=False).
         Also returns list of smaller insert statements.
-        :param master_statement: string containing master (large) insert_statement.
         :param perfile: number of rows to include per smaller text file (default 1000).
         :return: list of smaller insert statements
         """
-        lines = []
         statements = []
         # Pull out header from master statement:
         header, master_statement = self.insert_statement.split("\n", maxsplit=1)
@@ -1168,7 +1111,6 @@ class ImportStudy(ImportTools):
         # Number of rows to insert:
         rows = len(lines)
         files_to_make = math.ceil(rows / perfile)
-        file_num = 0
         for f in range(files_to_make):
             start = 0 + f * perfile
             end = (f + 1) * perfile
@@ -1190,7 +1132,6 @@ class ImportStudy(ImportTools):
                 with open(filename, "w") as my_file2:
                     my_file2.write(temp)
         return statements
-        # TODO: make sure not missing last line
 
     def insert_header(self):
         """
@@ -1210,11 +1151,6 @@ class ImportStudy(ImportTools):
         return build_str
 
 
-def what_is_this(input):
-    # TODO put this back in class
-    pass
-
-
 # main function:
 def main():
     """
@@ -1226,7 +1162,7 @@ def main():
     import_study3 = True  # UCR_2010_BeachSD
     import_study4 = True  # UCR_2011_BeachSD
     import_study5 = True  # Phase 2 Sediment Teck Data
-    import_study6 = True # Bossburg
+    import_study6 = True  # Bossburg
     import_study7 = True  # Phase 3 sediment
     import_study8 = True  # Phase 2 Sediment Trustee Data
     import_study9 = True  # Core Sample Results
@@ -1266,7 +1202,6 @@ def main():
                              sample_type="Sediment",
                              geo_cord_system="NAD83 UTM Zone 11U", utm_cord_system="NAD83 UTM Zone 11U", is_excel=True)
         study2.run_import()
-        # TODO: handle "RinseBlank" in location table
     if import_study3:
         print("Importing study 3 (UCR_2010_BeachSD):")
         study3 = ImportStudy(the_input="UCR_2010_BeachSD_fixed.xlsx", study_name="UCR_2010_BeachSD", study_year=2010,
@@ -1332,8 +1267,6 @@ def main():
                              special_cols_with_values=s9_val,
                              special_add_units_to_cols=s9_add)
         study9.run_import()
-        # TODO: convert to handle accepting strings
-    # TODO core sample results MAY BE "WGS84"
     if In_jyptr:
         Tunnel.stop()
 
@@ -1369,7 +1302,6 @@ def test_code():
     dict_of_strings["labresults"] = my_string
     with open("phase3_location.txt", "r", encoding='utf-8-sig') as my_file:
         my_string = my_file.read()
-    # TODO: drop down selecting labresult or locations
     dict_of_strings["locations"] = my_string
     print(my_string)  # Just to see what format the string is in
     string_study = ImportStudy(the_input=dict_of_strings, study_name="String Import4", study_year=9999,
@@ -1396,15 +1328,4 @@ if __name__ == '__main__':
     if run_test_code:
         test_code()
 
-# TODO indexes
-
-# TODO: Phase 3 sediment: skip field measures
-# TODO: do NOT skip field measurements for fish studies
-# TODO: no blanks in the database
-# TODO: check for columns with same name with different info and let mae rose know
-# TODO: rename private
-# TODO: handle data duplication
-# TODO: don't need field measurements for sediment, will need for biological
-# TODO: templates need to be able to handle deleted columns
-# TODO: is column_names.txt handled reasonably?
 # TODO: handle special headers for study 8 & 9 as strings
