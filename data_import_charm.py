@@ -23,8 +23,8 @@ For issues with this script, contact Allison Nau.
 # specify In_jyptr as True (use data_import.ipynb to do so)
 # If using script through website, specify In_website as True
 In_pycharm = False
-In_jyptr = True
-In_website = False  # TODO
+In_jyptr = False
+In_website = True  # TODO
 
 # Create partial insert statements? (To save to text. Partial insert statement will be automatically made when necessary
 # when connected to database
