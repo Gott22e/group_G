@@ -1,0 +1,226 @@
+#!/usr/local/Python-3.7/bin/python
+import pymysql
+import sys
+import cgi
+import pandas as pd
+
+import cgitb
+cgitb.enable()
+
+# print content-type
+print("Content-type: text/html\n")
+
+print("<html><head>")
+print("<title>Upper Columbia River Site Database</title>")
+
+print('''<style>
+<script src="https://code.jquery.com/jquery-3.4.1.js"></script>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+#styleB:hover {
+  background-color: #8fbc8f;
+}
+.topnav {
+  overflow: hidden;
+  background-color: #20b2aa;
+}
+
+.topnav a {
+  float: left;
+  color: white;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.topnav a:hover {
+  background-color: #8fbc8f ;
+  color: white;
+}
+
+.topnav a.active {
+  background-color: #00aaff;
+  color: white;
+}
+body {margin:30;padding:30}
+
+table, td, th {
+  border: 1px solid black;
+  text-align: center;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+.container2 {
+  position:absolute;
+}
+
+#right {
+  float:right;
+}
+
+.imgtopleft {
+  position:absolute;
+  top:-100px;
+  left:-10px;
+  width: 300px;
+  padding: 10px;
+
+}
+
+.imgtopright {
+  position:absolute;
+  top:-99px;
+  left:-60px;
+  width:300px;
+  padding: 10px;
+}
+
+.center {
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  -ms-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+}
+#styleB {
+  font-size: 16px;
+  border: none;
+  outline: none;
+  background-color: #20b2aa;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+</style>
+</head>''')
+
+print("</head>")
+print("<body>")
+
+print('''<h1 align="center"> Upper Columbia River Site Database </h1>''')
+
+print('''
+  <div class="container2">
+  <div class="imgtopleft">
+        <div id="logo">
+        <img src="/images/students_21/group_proj/group_G/logo.jpg" style="width:200px;height:80px;">
+  </div>
+  </div>
+  </div>
+''')
+
+print('''
+ <div class="topnav">
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/intro">Introduction</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/home">Home</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/upload">Upload</a>
+  <a class="active" href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/help">Help Page</a>
+</div>
+''')
+
+print("<h1>Help Page</h1>")
+print("<body>")
+print("""
+<p><b> Data Upload: </b></p> 
+<p><b>Currently the website is only accepting file upload via text.</b> </p>
+<p><b>To upload a CSV:</b></p>
+<ol>
+ <li>Open the CSV in a text editor like Windows Notepad or Mac TextEdit
+ <ol style="list-style-type: lower-alpha; padding-bottom: 0;">
+  <li style="margin-left:2em">Right click csv file -> open with -> Notepad</li>
+ </ol>
+ </li>
+ <li>Copy and paste the csv text from the text editor into the text box in the Upload tab.
+ <ol style="list-style-type: lower-alpha; padding-bottom: 0;">
+  <li style="margin-left:2em">In Notepad: right click -> select all -> CTRL+V to copy, CTRL+P to paste.</li>
+ </ol>
+ </li>
+ <li>Enter meta-data for the sample:
+ <ol style="list-style-type: lower-alpha; padding-bottom: 0;">
+  <li style="margin-left:2em">Enter a study name</li>
+  <li style="margin-left:2em; padding-bottom: 0;">Enter sample type (currently only "Sediment" studies are being accepted).</li>
+  <li style="margin-left:2em; padding-bottom: 0;">Enter Study Year.</li>
+  <li style="margin-left:2em; padding-bottom: 0;">Regarding coordinate systems:<b> some studies have two sets of coordinate systems</b>
+  <ol style="list-style-type: lower-roman; padding-bottom: 0;">
+  <li style="margin-left:2em; padding-bottom: 0;">Enter coordinate system associated with columns that are labeled like “X-Coord” and “Y-Coord” in “XY Coordinate System”.</li>
+  <li style="margin-left:2em; padding-bottom: 0;">Enter coordinate system associated with columns that are labeled like “UTM-X” and “UTM-Y” in “UTM Coordinate System”.</li>
+  <li style="margin-left:2em; padding-bottom: 0;">It is OK to leave one of the other Coordinate System field blank.</li>
+  <li style="margin-left:2em; padding-bottom: 0;">If you have no columns labeled similar to either of these, use “XY Coordinate System”.</li>
+ </ol>
+ </li>
+ </ol>
+ </li>
+ <li>Hit upload button</li>
+ <li>If any column names were unrecognized, a warning will pop up letting you know what columns were not recognized, and what all the column names that are currently in the system are.</li>
+ </ol>
+ </li>
+""")
+
+print("<body>")
+print("""
+<p><b>To upload an Excel file (or a study that has multiple CSVs associated with it)
+that has data split up into categories like “lab results”, “field measurements”, “locations”, “all metals”, “all data”, and “history”:</b></p>
+<ol>
+ <li>Save each sheet in the excel file as a csv while it is open in excel (this must be done for each sheet to be uploaded)</li>
+ <li>Open in a text editor and copy and paste into the webpage as with uploading a csv, with each sheet in a separate text box.</li>
+ <li>Select sheet name from drop down menu for each sheet.</li>
+ <li>Enter meta-data as in uploading a csv.</li>
+ <li>Hit upload button.</li>
+</ol>
+</li>
+<p><b>Note</b>: currently only sheets named “lab results” and “locations” can be uploaded into the database.</p>
+<p><b>Select Data:</b></p>
+<p><b>Note</b>: The units for searching analytes by depth is in 'cm'</p>
+<p>To download data for the website</p>
+<ol>
+ <li>Select analyte(s) of interest from the drop down menu. To select all analytes, leave blank.</li>
+ <li>If additional filtering is desired, the drop down menu 'Choose a column' provides additional filtering on the study columns. (Optional, this can be left blank)
+ <ol style="list-style-type: lower-alpha; padding-bottom: 0;">
+  <li style="margin-left:2em">'Please select option' drop down menu provides additional filtering ranges on columns selected</li>
+  <li style="margin-left:2em; padding-bottom: 0;"">Click 'Add Parameter'</li>
+  <li style="margin-left:2em; padding-bottom: 0;">Click 'Search'</li>
+  </ol>
+  </li>
+ <li>If filtering on range of depth, specify greater than desired upper depth and less than desired lower depth (<b>Note:</b> Units are in 'cm').</li>
+ <li>'Limit Search' allows for filtering on how many rows user would like to obtain.</li>
+ <li>Click 'Search'.</li>
+ <li>To download displayed table (filtered or unfiltered) click 'Export to Excel File'</li>
+ <li>To view graphical output of desired analyte click 'Go to graphs'</li>
+ </ol>
+ </li>
+""")
+
+
+
+print("<body>")
+print("""
+<p><b>Note</b>: Currently, only sediment data is available in the database.</p>
+""")
+
+print('''
+<p><b>External Coordinate Unit Converstion</b></p>
+<p>For an additional tool to handle geographical unit conversions please click on the button below to be brough to NGS Coordinate Conversion and Transformation Tool (NCAT)</p> 
+<a href="https://www.ngs.noaa.gov/NCAT/" style="position: absolute;z-index:1000;"> <button id='styleB'> Go to NCAT site! </button> </a>
+''')
+
+print('''
+  <div class="container2">
+  <div class="imgtopright">
+        <div id="BU">
+        <img src="https://logotyp.us/files413/bu.svg" style="width:200px;height:300px;">
+  </div>
+  </div>
+  </div>
+''')
+
+print('''</body></html>''')
+
+

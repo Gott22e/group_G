@@ -1,0 +1,424 @@
+#!/usr/local/Python-3.7/bin/python
+import pymysql
+import sys
+import cgi
+import pandas as pd
+import cgitb
+cgitb.enable()
+#import matplotlib.pyplot as plt
+#%matplotlib inline
+#from matplotlib.pyplot import figure
+from geo_out import *
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
+
+# print content-type
+print("Content-type: text/html\n")
+
+print("<html><head>")
+print("<title>Upper Columbia River Site Database</title>")
+print('''<style>
+<script src="https://code.jquery.com/jquery-3.4.1.js"></script>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.topnav {
+  overflow: hidden;
+  background-color: #20b2aa;
+}
+
+.topnav a {
+  float: left;
+  color: white;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.topnav a:hover {
+  background-color: #8fbc8f ;
+  color: white;
+}
+
+.topnav a.active {
+  background-color: #00aaff;
+  color: white;
+}
+body {margin:30;padding:30}
+
+#outTable td, th {
+  border: 1px solid black;
+  text-align: center;
+}
+#outTable tr:nth-child(odd){background-color:#f2f2f2;}
+#outTable { border-collapse: collapse;}
+
+#toTop {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 30px;
+  z-index: 99;
+  font-size: 18px;
+  border: none;
+  outline: none;
+  background-color: #20b2aa;;
+  color: white;
+  cursor: pointer;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+#toTop:hover {
+  background-color: #8fbc8f;
+}
+
+#styleB {
+  font-size: 16px;
+  border: none;
+  outline: none;
+  background-color: #20b2aa;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+#styleB:hover {
+  background-color: #8fbc8f;
+}
+
+.container2 {
+  position:absolute;
+}
+
+#right {
+  float:right;
+}
+
+.imgtopleft {
+  position: absolute;
+  top:-50px;
+  left:-10px;
+  width:300px;
+  padding:10px;
+}
+
+.imgtopright {
+  position:absolute;
+  top:-50px;
+  left:-150px;
+  width:300px;
+  padding:10px;
+}
+
+</style><script src="excellentexport-3.3.0/excellentexport.js"></script>
+<script>
+    require(['dist/excellentexport'], function(ee) {
+        window.ExcellentExport = ee;
+    });
+</script>
+<script  src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+</head>''')
+print("</head>")
+print("<body>")
+
+print('''<button onclick="topFunction()" id="toTop" title="Go to top">To Top</button>''')
+
+print('''
+  <div class="container2">
+  <div class="imgtopleft">
+        <div id="logo">
+        <img src="/images/students_21/group_proj/group_G/logo.jpg" style="width:200px;height:80px;">
+  </div>
+  </div>
+  </div>
+''')
+
+connection = pymysql.connect(user="test",password="test",db="group_G",port=4253)
+c =connection.cursor()
+c.execute("SELECT DISTINCT(analyte) FROM cr;")
+analyteList = []
+fetched = c.fetchall()
+
+for row in fetched:
+	analyteList.append(row[0])
+
+#get the column names
+getColNames = "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'cr';"
+c.execute(getColNames)
+allCol = pd.DataFrame(c.fetchall(), columns = ['name','data'])
+colNames = allCol['name'].tolist()
+allCol.index = colNames
+
+c.close()
+connection.close()
+
+print('''<h1 align="center"> Upper Columbia River Site Database </h1>''')
+
+
+
+print('''
+ <div class="topnav">
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/intro">Introduction</a>
+  <a class="active" href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/home">Home</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/upload">Upload</a>
+  <a href="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/help">Help Page</a>
+</div> 
+''') 
+#print(allCol)
+print("""<h1>Search Database</h1>""")
+print('''<form name="Columbia River DB" onsubmit="return checkInput();" action="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/home" method="get" >
+Analyte: <input type="text" placeholder="e.g. Mercury" list="sel" id="name" name ="name"><datalist id="sel" name="sel"><option value="">All</option>''' )
+for row in analyteList:
+        print('''<option value = "{0}">{0}</option>'''.format(row))
+
+print('''</datalist>
+<div class="category_div" id="category_div">
+<select name="category" class="required-entry" id="category" onchange="javascript: dynamicdropdown(category.options[category.selectedIndex].value);">
+                Filter on : <option value="val">Choose a Column:</option>''')
+for row in colNames:
+        if row != 'analyte':
+                val = allCol['data'][row]
+                print('''<option value = "{1}">{0}</option>'''.format(row, val))
+print('''</select>
+                <select name="subcategory" id="subcategory" >
+                    <option value="">Please Select Method</option>
+                </select>
+                <div style="display: inline" id="changeInput">
+                <input type="hidden" name="third" id="third" value = ""/>
+                </div>
+        <button id="styleB" name="add" type="button" onclick="javascript: addFunction(category.options[category.selectedIndex].innerText, subcategory.options[subcategory.selectedIndex].innerText);">Add Parameter</button>
+	</div> 
+	Upper Depth Minimum: <input type="number" placeholder="e.g. 0.0 cm" id="upper depth" name="upper depth" value="" step="any"/>(cm) to  
+        Lower Depth Maximum: <input type="number" placeholder="e.g. 27.6 cm" id="lower depth" name="lower depth" value="" step="any"/>(cm)
+                    <div id="newRow"></div>
+                    Limit Results: <input type="number" name="limit" id="limit" label="Limit Results"/>
+                <br><input id="styleB" type="submit" value="Search" / >
+ </form>''')
+
+#get forms
+form = cgi.FieldStorage()
+analyte = form.getvalue("name")
+hidden = form.getlist("txt")
+limit = form.getvalue("limit")
+hidden = " and ".join(hidden)
+upper_depth = form.getvalue("upper depth")
+lower_depth = form.getvalue("lower depth")
+
+#print(hidden) #for debugging
+#Creates query
+
+print('''
+<p><b>Note:</b> If filtering by choosing columns please ensure to select methods and fill remaining boxes. In addition, units for searching by depth is in 'cm'</p>
+<p>Leave fields blank if needed</p>
+''')
+
+query = "SELECT *  FROM cr"
+q2 = ""
+if analyte:
+        q2 += " analyte LIKE '" + analyte + "' "
+if hidden:
+        if len(q2)>0:
+                q2 += " and "
+        q2 +=  hidden
+if upper_depth:
+	if len(q2)>0:
+                q2 += " and "
+	q2 += " upper_depth >= '%s' " %(upper_depth)
+if lower_depth:
+	if len(q2)>0:
+                q2 += " and "
+	q2 += " lower_depth <= '%s' " %(lower_depth)
+flag = 0
+if len(q2)>0:
+	q2 += " and "
+	flag += 1
+q2 += " location_id != 'RinseBlank' and "
+q2 += " lab_rep NOT IN ('2', '3', '4', 'BIO2', 'CONFRM', 'RE2') and "	
+q2 += " material_analyzed NOT IN ('RinseWater', 'Blank-Filteration', 'Porewater') and "
+q2 += " study_element != 'QC' "
+	# For filtering on results we do want
+query += " WHERE " + q2
+if limit:
+	query += " LIMIT " + limit
+	flag += 1
+if flag==0:
+	query += " LIMIT 50"
+query += ";"
+
+#Comment out when done; used for testing
+#if analyte:
+#print(query)
+
+#Create Connection
+connection = pymysql.connect(user="test",password="test",db="group_G",port=4253)
+c =connection.cursor()
+#Execute final_q
+c.execute(query)
+allRows = c.fetchall()
+#get the column names
+#getColNames = "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'cr';"
+#c.execute(getColNames)
+#colNames = []
+#mtx = c.fetchall()
+#for unit in mtx:
+#	colNames.append(unit[0])
+#print(mtx)
+#create dataframe for graphical output
+data = pd.DataFrame(allRows, columns = colNames)
+#data = pd.concat([data, pd.DataFrame(allRows)])
+#if len(data.columns) == len(colNames):
+#	data.columns = colNames
+#print(colNames)
+#Create table and buttons to link
+print(""" <h2 id= "result" >Results</h2>""")
+print("""<button id="styleB" onclick="javascript: goGraph()">Go to graphs</button>
+<a download="databaseDownload.xls" href="#" onclick="return ExcellentExport.excel(this, 'outTable');"><button id="styleB">Export To Excel</button></a><br><br>""")
+
+#Create table columns
+tableCols = "<tr>"
+for name in colNames:
+        tableCols = tableCols + "<th> {0} </th>".format(name)
+tableCols = tableCols + "</tr>"
+#Print each Row to the table
+tableRows = "" 
+for row in allRows:
+        tableRows += "<tr>"
+        for i in row:
+                tableRows += "<td> {0} </td>".format(i)
+        tableRows += "</tr>"
+c.close()
+connection.close()
+print("""<table id='outTable' name='outTable'>""")
+print(tableCols)
+print(tableRows)
+print("</table>")
+
+
+#print(data.columns)
+print("""<h2 id= "graph"> Graphs</h2>""") 
+print("""<button id="styleB" onclick="javascript: topFunction()" >Go to results</button>""")
+#Graphs go here
+#Call the output
+geo_out(data)
+#print("""<img src=plot.png width="800" height="800" />""")
+print('''
+  <div class="container2">
+  <div class="imgbottomright">
+        <div id="plot">
+        <img src="/images/students_21/group_proj/group_G/plot.png" style="width:1200px;height800px;"/>
+  </div>
+  </div>
+	 <div>
+           <div>
+           <img src="https://logotyp.us/files413/bu.svg" style="width:200px;height:300px;">
+         </div>
+  </div>
+''')
+
+
+#data_csv=data.to_csv()
+#print(data_csv)
+
+#Javascript and Ajax code
+print('''
+<script type="text/javascript">
+function checkInput() {
+    var analyte = document.getElementById('name').value;
+    var upper_depth = document.getElementById('upper depth').value;
+    var lower_depth = document.getElementById('lower depth').value;
+    // check out whether analyte is empty.
+   // if (analyte == "") {
+    //    alert("You did not enter an analyte!");
+    //    return false; }
+    //
+   // else if (analyte.indexOf(analyte) == -1 ) {
+   //     alert("Analyte not found");
+   //     return false; }else { return true; };
+};
+
+
+//Scroll button code
+//Gets button, adds listeners
+var mybutton = document.getElementById("toTop"); //get Button
+// When the user scrolls, show the button
+window.onscroll = function() {scrollFunction()};
+function scrollFunction() {
+  if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
+    mybutton.style.display = "block";
+  } else {
+    mybutton.style.display = "none";
+  };
+};
+// When the user clicks on the button, scroll to the top of the document
+function goGraph(){
+   var element = document.getElementById('graph');
+   element.scrollIntoView();
+};
+function topFunction() {
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+};
+</script>
+<script language="javascript" type="text/javascript">
+            // remove row
+            $(document).on('click', '#removeRow', function () {
+                $(this).closest('#inputFormRow').remove();
+            });
+            function addFunction(cat, sub){
+                var html = '';
+                var subv = $("#subcategory").val();
+                var third = $("#third").val();
+                html += '<div id="inputFormRow"> ';
+                html += '<input type="hidden" name="txt" id="txt" value = "'+ cat + ' ' + subv + ' ' + "'"+ third + "' " + '"/>'
+	        html +=   cat + ' '  + sub + ' ' + third ;
+		html += ' <button id="removeRow" id="styleB" type="button" >Remove</button>';
+                html += '</div>';
+
+                $('#newRow').append(html);
+            }
+            function dynamicdropdown(listindex)
+            {
+                $("#subcategory").empty();
+                $('#changeInput').empty();
+                switch (listindex){
+                    case "int" :
+                        document.getElementById("subcategory").options[0]=new Option("Please select Option","");
+                        document.getElementById("subcategory").options[1]=new Option("Equals", "=");
+                        document.getElementById("subcategory").options[2]=new Option("Greater Than", ">=");
+                        document.getElementById("subcategory").options[3]=new Option("Less Than", "<=");
+                        $('#changeInput').append('<input type="number" placeholder="e.g. 0" id="third" name="third" value="" step="0"/>');
+                        break;
+
+                    case "varchar" :
+                        document.getElementById("subcategory").options[0]=new Option("Please select Option","");
+                        document.getElementById("subcategory").options[1]=new Option(" Is Exactly ","=");
+                        $('#changeInput').append('<input type="text" placeholder="e.g. Words" id="third" name="third" value="" step="0"/>');
+                        break;
+                    case "decimal" :
+                        document.getElementById("subcategory").options[0]=new Option("Please select Option","");
+                        document.getElementById("subcategory").options[1]=new Option("Equals", "=");
+                        document.getElementById("subcategory").options[2]=new Option("Greater Than", ">=");
+                        document.getElementById("subcategory").options[3]=new Option("Less Than", "<=");
+                        $('#changeInput').append('<input type="number" placeholder="e.g. 0.0" id="third" name="third" value="" step="any"/>');                        
+                        break;
+                    case "datetime" :
+                        document.getElementById("subcategory").options[0]=new Option("Please select Option","");
+                        document.getElementById("subcategory").options[1]=new Option("Equals", "=");
+                        document.getElementById("subcategory").options[2]=new Option("Greater Than", ">=");
+                        document.getElementById("subcategory").options[3]=new Option("Less Than", "<=");
+                        $('#changeInput').append('<input type="date" id="third" name="third" value=""/>');
+                        break;
+                }
+            return true;
+            }
+        </script>
+
+
+''')
+
+print("""</body></html>""")

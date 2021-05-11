@@ -54,12 +54,46 @@ table {
   border-collapse: collapse;
 }
 
+.container2 {
+  position:absolute;
+}
+
+#right {
+  float:right;
+}
+
+.imgtopleft {
+  position:absolute;
+  top:-100px;
+  left:-10px;
+  width:300px;
+  padding:10px;
+}
+
+.imgtopright {
+  position:absolute;
+  top:10px;
+  left:-60px;
+  width:300px;
+  padding:10px;
+}
+
 </style>
 </head>''')
 print("</head>")
 print("<body>")
 
 print('''<h1 align="center"> Upper Columbia River Site Database </h1>''')
+
+print('''
+  <div class="container2">
+  <div class="imgtopleft">
+        <div id="logo">
+        <img src="/images/students_21/group_proj/group_G/logo.jpg" style="width:200px;height:80px;">
+  </div>
+  </div>
+  </div>
+''')
 
 print('''
  <div class="topnav">
@@ -71,6 +105,9 @@ print('''
 ''')
 
 print("<h1>Add  Database</h1>")
+print('''
+<p><b>Note:</b> Accepted depth units: inches (in, inch, inches), centimeter (cm, centimeter, centimeters), meter (meter, meters), and feet (ft, foot, feet).</p>
+''')
 print('''<form name="Columbia River DB" action="https://bioed.bu.edu/cgi-bin/students_21/group_proj/group_G/upload" method="POST" >
 	Study Name: <input type="text" placeholder="Phase_7_Sediment" id = "study name" name="study name" value =""/>
 	Study Year: <input type="number" placeholder="2013" id="study year" name="study year"  value="" step="1"/>
@@ -80,6 +117,7 @@ print('''<form name="Columbia River DB" action="https://bioed.bu.edu/cgi-bin/stu
 	<input type="submit" value="Submit">
 	<br> Paste Locations(Optional):<br> <textarea name="uploaded2" id = "uploaded2" rows = "20" cols = "150" /></textarea>
 	</form>''')
+
 
 #get forms
 form = cgi.FieldStorage()
@@ -108,7 +146,7 @@ if file and file2:
     dict_of_strings["labresults"] = file
     dict_of_strings["locations"] = file2
 
-    print(dict_of_strings)
+    #print(dict_of_strings)
 
     string_study = ImportStudy(the_input=dict_of_strings, study_name=study_name, study_year=study_year,
                                sample_type="Sediment", geo_cord_system=xy_coord, utm_cord_system=utm_coord,
@@ -143,4 +181,15 @@ print("""
 </script>
 
 """)
+
+print('''
+ <div class="container2">
+ <div class="imgbottomright">
+   <div id="BU">
+   <img src="https://logotyp.us/files413/bu.svg" style="width:200px;height:300px;">
+ </div>
+ </div>
+ </div>
+''')
+
 print("</body></html>")
